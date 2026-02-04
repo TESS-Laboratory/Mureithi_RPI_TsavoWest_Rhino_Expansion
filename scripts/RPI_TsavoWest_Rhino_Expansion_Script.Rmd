@@ -1,0 +1,88 @@
+---
+title: "RPI_TsavoWest_Rhino_Expansion_Script"
+author: "Isaac Nduta Mureithi"
+date: "2026-02-04"
+output: html_document
+---
+
+```{r}
+# Load libraries
+
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, tmap, trend, slider, forcats, viridis, viridisLite, scales, hexbin, ggh4x, scico, ggridges, truncnorm, zoo)
+
+# DATA HANDLING#
+# tidyverse -> for data manipulation, cleaning, and visualisation in a cohesive framework
+# forcats -> for managing factors (categorical variables)
+# slider -> for rolling or sliding window calculations
+# zoo -> for working with ordered observations, especially time-series data, with irregular time steps
+
+# SPATIAL DATA & MAPPING#
+# sf -> for handling vector spatial data (points, lines, polygons)
+# terra -> for handling and processing raster data
+# tidyterra -> for using tidyverse tools on terra objects
+# tmap -> for creating thematic maps
+
+# VISUALISATION#
+# viridis -> for perceptually uniform color palettes
+# viridisLite -> same use as above though I shall use this for R^2 (Temporal Performance raster)
+# scales -> for controlling plot scale formatting (e.g., number and date labels)
+# hexbin -> for visualizing point density with hexagonal bins
+# ggh4x -> for advanced ggplot2 features = facetted_pos_scales
+# scico -> for scientific color maps
+# colorspace -> for a wide variety of perceptually uniform color palettes
+# ggrepel -> for preventing text labels from overlapping
+# patchwork -> for combining multiple plots into one figure
+# ggridges -> for creating ridge plots (joy plots)
+# truncnorm -> for generating random numbers from a truncated normal distribution
+
+# STATISTICAL ANALYSIS#
+#trend -> for analysing trends in time-series data = Theil-Sen slope
+```
+
+```{r}
+# Importing RPI Datasets - Rasters (TIFs)
+
+Actual.GPP <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/actual_gpp_ea_v2.tif")
+
+Potential.GPP <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/potential_gpp_ea_v2.tif")
+
+RPI <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/rpi_ea_v2.tif")
+
+Temporal.Performance <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/rpi_ea_temporal_performance.tif")
+```
+
+```{r}
+# Africa Country Boundary import
+
+Africa.Country.Boundaries <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/africa_country_boundaries_simplified_wgs84.shp")
+```
+
+```{r}
+#Focusing on Kenya
+
+Kenya.Admin.Boundary <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/kenya_admin_boundary_wgs84.shp")
+```
+
+```{r}
+# Focusing on Kenya's Terrestrial Protected Areas
+
+Kenya.Terrestrial.PAs <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/kenya_terrestrial_protected_areas_wgs84.shp")
+```
+
+```{r}
+# Importing Tsavo West National Park Boundary
+
+TsavoWest <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/WDPA_Amboseli_Tsavo/National Parks&Reserves/TsavoWest-WDPA_WDOECM_Apr2025_Public_19564_shp/WDPA_WDOECM_Apr2025_Public_19564_shp_0/WDPA_WDOECM_Apr2025_Public_19564_shp-polygons.shp")
+```
+
+```{r}
+# Importing Rhino Expansion Area Boundary
+
+Ngulio_Sanctuary <- st_read("C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/TsavoWest_Rhino_Zones/Ngulio_Sanctuary.shp")
+
+TsavoWest_IntensiveProtectionZone <- st_read("C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/TsavoWest_Rhino_Zones/Tsavo_West_Intensive_Protection_Zone.shp")
+```
+
+```{r}
