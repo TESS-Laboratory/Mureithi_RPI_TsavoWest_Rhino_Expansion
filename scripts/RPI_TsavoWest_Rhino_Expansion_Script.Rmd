@@ -66,22 +66,23 @@ Africa.Country.Boundaries <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Gov
 
 ```{r}
 # Interactive Africa Country Boundaries
+
 tm_shape(Africa.Country.Boundaries) +
   tm_polygons(
     fill = "lightyellow",
     col = "black",
     lwd = 1,
     fill_alpha = 0.4,
-    id = "COUNTRY"   # adjust to correct column name if different
+    id = "Level_4_Na"
   ) +
   tm_view(
-  basemaps = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
+    basemap.server = c(
+      "Esri.WorldImagery",
+      "OpenStreetMap",
+      "Esri.WorldGrayCanvas",
+      "Esri.WorldTopoMap"
+    )
   )
-)
 ```
 
 ```{r}
@@ -98,16 +99,16 @@ tm_shape(Kenya.Admin.Boundary) +
     col = "black",
     lwd = 2,
     fill_alpha = 0.4,
-    id = "NAME"   # adjust if attribute column differs
+    id = "ADM0_EN"
   ) +
   tm_view(
-  basemaps = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
+    basemap.server = c(
+      "Esri.WorldImagery",
+      "OpenStreetMap",
+      "Esri.WorldGrayCanvas",
+      "Esri.WorldTopoMap"
+    )
   )
-)
 ```
 
 ```{r}
@@ -118,16 +119,26 @@ Kenya.Terrestrial.PAs <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governa
 
 ```{r}
 # Interactive Kenya Terrestrial Protected Areas
+tm_shape(Kenya.Admin.Boundary) +
+  tm_polygons(
+    fill = "lightgrey",
+    col = "black",
+    lwd = 1,
+    fill_alpha = 0.3,
+    id = "ADM0_EN"
+  ) +
+  
 tm_shape(Kenya.Terrestrial.PAs) +
   tm_polygons(
     fill = "darkgreen",
     col = "black",
     lwd = 1,
-    fill_alpha = 0.5,
-    id = "NAME"   # often WDPA_NAME or NAME
+    fill_alpha = 0.3,
+    id = "NAME"
   ) +
-  tm_view(
-  basemaps = c(
+  
+tm_view(
+  basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
     "Esri.WorldGrayCanvas",
@@ -149,7 +160,7 @@ tm_shape(TsavoWest) +
     fill = "orange",
     col = "black",
     lwd = 2,
-    fill_alpha = 0.4,
+    fill_alpha = 0.2,
     id = "NAME"   # usually WDPA_NAME
   ) +
   tm_view(
@@ -174,17 +185,18 @@ TsavoWest_IntensiveProtectionZone <- st_read("C:/Workspace/Mureithi_RPI_TsavoWes
 # Checking Attribute Names
 names(TsavoWest)
 names(Ngulio_Sanctuary)
+names(TsavoWest_IntensiveProtectionZone)
 ```
 
 ```{r}
 # Interactive Ngulio Sanctuary
 tm_shape(Ngulio_Sanctuary) +
   tm_polygons(
-    fill = "red",
+    fill = "orange",
     col = "black",
     lwd = 2,
-    fill_alpha = 0.4,
-    id = "Name"   # check exact field name
+    fill_alpha = 0.2,
+    id = "Id"
   ) +
   tm_view(
   basemaps = c(
@@ -200,11 +212,11 @@ tm_shape(Ngulio_Sanctuary) +
 # Interactive Tsavo West Intensive Protection Zone
 tm_shape(TsavoWest_IntensiveProtectionZone) +
   tm_polygons(
-    fill = "purple",
+    fill = "orange",
     col = "black",
     lwd = 2,
-    fill_alpha = 0.4,
-    id = "Name"   # confirm attribute column
+    fill_alpha = 0.2,
+    id = "Id"
   ) +
   tm_view(
   basemaps = c(
