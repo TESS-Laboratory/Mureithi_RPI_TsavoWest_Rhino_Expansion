@@ -10,7 +10,7 @@ output: html_document
 
 if (!require("pacman")) install.packages("pacman")
 
-pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, tmap, trend, slider, forcats, viridis, viridisLite, scales, hexbin, ggh4x, scico, ggridges, truncnorm, zoo)
+pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, tmap, trend, slider, forcats, viridis, viridisLite, scales, hexbin, ggh4x, scico, ggridges, truncnorm, zoo, cowplot, ggplotify, png, magick, ggtext, grid)
 
 # DATA HANDLING#
 # tidyverse -> for data manipulation, cleaning, and visualisation in a cohesive framework
@@ -36,6 +36,11 @@ pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, 
 # patchwork -> for combining multiple plots into one figure
 # ggridges -> for creating ridge plots (joy plots)
 # truncnorm -> for generating random numbers from a truncated normal distribution
+# cowplot -> for arranging multiple ggplot objects and converting other plot types into ggplot-compatible objects 
+# ggplotify -> for converting non-ggplot objects (like base R plots or tmap grobs) into ggplot objects
+# png -> for basic reading and writing of PNG files into raw pixel arrays
+# magick -> for professional-grade image processing, editing, and format conversion
+# ggtext → enhanced text rendering in ggplot2 using Markdown/HTML (e.g., bold, italics, styled labels)
 
 # STATISTICAL ANALYSIS#
 #trend -> for analysing trends in time-series data = Theil-Sen slope
@@ -60,9 +65,49 @@ Africa.Country.Boundaries <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Gov
 ```
 
 ```{r}
+# Interactive Africa Country Boundaries
+tm_shape(Africa.Country.Boundaries) +
+  tm_polygons(
+    fill = "lightyellow",
+    col = "black",
+    lwd = 1,
+    fill_alpha = 0.4,
+    id = "COUNTRY"   # adjust to correct column name if different
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
+```
+
+```{r}
 #Focusing on Kenya
 
 Kenya.Admin.Boundary <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/kenya_admin_boundary_wgs84.shp")
+```
+
+```{r}
+# Interactive Kenya Administrative Boundary
+tm_shape(Kenya.Admin.Boundary) +
+  tm_polygons(
+    fill = "lightblue",
+    col = "black",
+    lwd = 2,
+    fill_alpha = 0.4,
+    id = "NAME"   # adjust if attribute column differs
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
 ```
 
 ```{r}
@@ -72,9 +117,49 @@ Kenya.Terrestrial.PAs <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governa
 ```
 
 ```{r}
+# Interactive Kenya Terrestrial Protected Areas
+tm_shape(Kenya.Terrestrial.PAs) +
+  tm_polygons(
+    fill = "darkgreen",
+    col = "black",
+    lwd = 1,
+    fill_alpha = 0.5,
+    id = "NAME"   # often WDPA_NAME or NAME
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
+```
+
+```{r}
 # Importing Tsavo West National Park Boundary
 
 TsavoWest <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/WDPA_Amboseli_Tsavo/National Parks&Reserves/TsavoWest-WDPA_WDOECM_Apr2025_Public_19564_shp/WDPA_WDOECM_Apr2025_Public_19564_shp_0/WDPA_WDOECM_Apr2025_Public_19564_shp-polygons.shp")
+```
+
+```{r}
+# Interactive Tsavo West National Park
+tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "orange",
+    col = "black",
+    lwd = 2,
+    fill_alpha = 0.4,
+    id = "NAME"   # usually WDPA_NAME
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
 ```
 
 ```{r}
@@ -86,3 +171,98 @@ TsavoWest_IntensiveProtectionZone <- st_read("C:/Workspace/Mureithi_RPI_TsavoWes
 ```
 
 ```{r}
+# Checking Attribute Names
+names(TsavoWest)
+names(Ngulio_Sanctuary)
+```
+
+```{r}
+# Interactive Ngulio Sanctuary
+tm_shape(Ngulio_Sanctuary) +
+  tm_polygons(
+    fill = "red",
+    col = "black",
+    lwd = 2,
+    fill_alpha = 0.4,
+    id = "Name"   # check exact field name
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
+```
+
+```{r}
+# Interactive Tsavo West Intensive Protection Zone
+tm_shape(TsavoWest_IntensiveProtectionZone) +
+  tm_polygons(
+    fill = "purple",
+    col = "black",
+    lwd = 2,
+    fill_alpha = 0.4,
+    id = "Name"   # confirm attribute column
+  ) +
+  tm_view(
+  basemaps = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  )
+)
+```
+
+```{r}
+#Checking Coordinate Reference Systems (CRS)
+list(
+  Africa = st_crs(Africa.Country.Boundaries)$epsg,
+  Kenya = st_crs(Kenya.Admin.Boundary)$epsg,
+  PAs = st_crs(Kenya.Terrestrial.PAs)$epsg,
+  TsavoWest = st_crs(TsavoWest)$epsg,
+  Ngulio = st_crs(Ngulio_Sanctuary)$epsg,
+  IPZ = st_crs(TsavoWest_IntensiveProtectionZone)$epsg
+)
+```
+
+```{r}
+# Visualising RPI for each Area
+```
+
+```{r}
+## Visualising Tsavo West NP - RPI 
+
+TsavoWest.RPI.Mask <- mask(RPI, TsavoWest)
+TsavoWest.RPI.Crop <- crop(TsavoWest.RPI.Mask, TsavoWest)
+
+# Averaging across years for visualization
+TsavoWest.RPI.Mean <- mean(TsavoWest.RPI.Crop, na.rm = TRUE)
+
+# Visualise
+tmap_mode("view")
+tm_shape(TsavoWest.RPI.Mean) +
+  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
+            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "white", lwd = 2) +
+  tm_title("Spatial Distribution of Mean RPI in Tsavo West NP") +
+  tm_layout(legend.outside = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
