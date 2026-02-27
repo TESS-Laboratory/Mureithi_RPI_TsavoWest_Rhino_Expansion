@@ -6,9 +6,11 @@ output: html_document
 ---
 
 ```{r}
-# Load libraries
+# Load libraries 
 
-if (!require("pacman")) install.packages("pacman")
+# The {"if (require("pacman")) install.packages("pacman")"} - for loading and installing packages in a single command -> only need to do this once
+
+# if (!require("pacman")) install.packages("pacman")
 
 pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, tmap, trend, slider, forcats, viridis, viridisLite, scales, hexbin, ggh4x, scico, ggridges, truncnorm, zoo, cowplot, ggplotify, png, magick, ggtext, grid)
 
@@ -518,7 +520,9 @@ tm_shape(TW.Rhino.Range.RPI.Mean) +
 )
 ```
 
+```{r}
 
+```
 
 
 
