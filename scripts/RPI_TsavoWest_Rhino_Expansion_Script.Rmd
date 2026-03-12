@@ -637,22 +637,10 @@ tmap_arrange(PMLv2.GPP.Map, PMLv2.EC.Map, PMLv2.ES.Map, PMLv2.EI.Map, ncol = 2)
 StudyPixelsKenya.IGBP.Map <- tm_shape(StudyPixelsKenya[["igbp"]]) +
   tm_raster(
     col.scale = tm_scale_categorical(
-      values = c(
-        "NA"  = "#FFFFFF", # No Data (white)
-        "6"   = "#ADFF2F", # Closed Shrubland
-        "7"   = "#98FB98", # Open Shrubland
-        "8"   = "#DAA520", # Woody Savanna
-        "9"   = "#FFD700", # Savanna
-        "10"  = "#F0E68C"  # Grassland
-      ),
-      labels = c(
-        "NA"  = "No Data",
-        "6"   = "Closed Shrub",
-        "7"   = "Open Shrub",
-        "8"   = "Woody Savanna",
-        "9"   = "Savanna",
-        "10"  = "Grassland"
-      )
+      values = c("6"="#ADFF2F", "7"="#98FB98", "8"="#DAA520", "9"="#FFD700", "10"="#F0E68C"),
+      labels = c("Closed Shrub", "Open Shrub", "Woody Savanna", "Savanna", "Grassland"),
+      value.na = NA,
+      label.na = "No Data" 
     ),
     col_alpha = 0.8,
     col.legend = tm_legend(title = "MODIS Land Cover")
@@ -668,11 +656,8 @@ StudyPixelsKenya.IGBP.Map <- tm_shape(StudyPixelsKenya[["igbp"]]) +
 # 2: Trees (% cover)
 StudyPixelsKenya.Trees.Map <- tm_shape(StudyPixelsKenya[["trees"]]) +
   tm_raster(
-    col.scale = tm_scale_intervals(values = "brewer.greens", style = "quantile", n = 7),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "Tree Cover (%)")
-  ) +
-  tm_title("Tree Cover") +
+    col.scale = tm_scale_intervals(values = "brewer.greens", style = "pretty", n = 7, value.na = NA),
+    col.legend = tm_legend(title = "Tree Cover (%)")) + tm_title("Tree Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
@@ -683,11 +668,8 @@ StudyPixelsKenya.Trees.Map <- tm_shape(StudyPixelsKenya[["trees"]]) +
 # 3: Shrubland (% cover)
 StudyPixelsKenya.Shrub.Map <- tm_shape(StudyPixelsKenya[["shrubland"]]) +
   tm_raster(
-    col.scale = tm_scale_intervals(values = "brewer.yl_gn", style = "quantile", n = 7),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "Shrubland Cover (%)")
-  ) +
-  tm_title("Shrubland Cover") +
+    col.scale = tm_scale_intervals(values = "brewer.yl_gn", style = "pretty", n = 7, value.na = NA),
+    col.legend = tm_legend(title = "Shrubland Cover (%)")) + tm_title("Shrubland Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
@@ -698,11 +680,8 @@ StudyPixelsKenya.Shrub.Map <- tm_shape(StudyPixelsKenya[["shrubland"]]) +
 # 4: Grassland (% cover)
 StudyPixelsKenya.Grass.Map <- tm_shape(StudyPixelsKenya[["grassland"]]) +
   tm_raster(
-    col.scale = tm_scale_intervals(values = "brewer.yl_or_br", style = "quantile", n = 7),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "Grassland Cover (%)")
-  ) +
-  tm_title("Grassland Cover") +
+    col.scale = tm_scale_intervals(values = "brewer.yl_or_br", style = "pretty", n = 7, value.na = NA),
+    col.legend = tm_legend(title = "Grassland Cover (%)")) + tm_title("Grassland Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
@@ -713,11 +692,8 @@ StudyPixelsKenya.Grass.Map <- tm_shape(StudyPixelsKenya[["grassland"]]) +
 # 5: Bare Ground (% cover)
 StudyPixelsKenya.BareGround.Map <- tm_shape(StudyPixelsKenya[["bare"]]) +
   tm_raster(
-    col.scale = tm_scale_intervals(values = "brewer.greys", style = "quantile", n = 7),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "Bare Ground (%)")
-  ) +
-  tm_title("Bare Ground") +
+    col.scale = tm_scale_intervals(values = "brewer.greys", style = "pretty", n = 7, value.na = NA),
+    col.legend = tm_legend(title = "Bare Ground (%)")) + tm_title("Bare Ground") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
@@ -728,11 +704,8 @@ StudyPixelsKenya.BareGround.Map <- tm_shape(StudyPixelsKenya[["bare"]]) +
 # 6: All Rangelands (% cover)
 StudyPixelsKenya.Rangelands.Map <- tm_shape(StudyPixelsKenya[["allRangelands"]]) +
   tm_raster(
-    col.scale = tm_scale_intervals(values = "brewer.spectral", style = "quantile", n = 7),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "All Rangelands (%)")
-  ) +
-  tm_title("All Rangelands") +
+    col.scale = tm_scale_intervals(values = "brewer.spectral", style = "pretty", n = 7,value.na = NA),
+    col.legend = tm_legend(title = "All Rangelands (%)")) + tm_title("All Rangelands") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
@@ -740,7 +713,7 @@ StudyPixelsKenya.Rangelands.Map <- tm_shape(StudyPixelsKenya[["allRangelands"]])
     "Esri.WorldTopoMap")
     )
 
-# Arrange all maps in a grid (2 columns x 3 rows)
+tmap_mode("view")
 tmap_arrange(StudyPixelsKenya.IGBP.Map, 
              StudyPixelsKenya.Trees.Map, 
              StudyPixelsKenya.Shrub.Map, 
@@ -748,7 +721,6 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
              StudyPixelsKenya.BareGround.Map, 
              StudyPixelsKenya.Rangelands.Map, 
              ncol = 2)
-
 ```
 
 ```{r}
