@@ -330,6 +330,13 @@ TW.Rhino.Range <- dplyr::bind_rows(
 ```
 
 ```{r}
+# Ensuring all CRS match
+RPI_CRS <- crs(RPI)
+TsavoWest <- st_transform(TsavoWest, RPI_CRS)
+TW.Rhino.Range <- st_transform(TW.Rhino.Range, RPI_CRS)
+```
+
+```{r}
 # Interactive Tsavo West Rhino Range (Ngulia Sanctuary + IPZ) 
 tm_shape(TW.Rhino.Range) +
   tm_polygons(
@@ -386,9 +393,9 @@ tm_shape(TW.Rhino.Range) +
 
 ```{r}
 ## Visualising Tsavo West NP - RPI 
-
-TsavoWest.RPI.Mask <- mask(RPI, TsavoWest)
 TsavoWest.RPI.Crop <- crop(TsavoWest.RPI.Mask, TsavoWest)
+TsavoWest.RPI.Mask <- mask(RPI, TsavoWest)
+
 
 # Averaging across years for visualisation
 TsavoWest.RPI.Mean <- mean(TsavoWest.RPI.Crop, na.rm = TRUE)
@@ -420,9 +427,9 @@ tm_shape(TsavoWest.RPI.Mean) +
 
 ```{r}
 ## Visualising Ngulia Sanctuary - RPI 
-
-NguliaSanctuary.RPI.Mask <- mask(RPI, NguliaSanctuary)
 NguliaSanctuary.RPI.Crop <- crop(NguliaSanctuary.RPI.Mask, NguliaSanctuary)
+NguliaSanctuary.RPI.Mask <- mask(RPI, NguliaSanctuary)
+
 
 # Averaging across years for visualization
 NguliaSanctuary.RPI.Mean <- mean(NguliaSanctuary.RPI.Crop, na.rm = TRUE)
@@ -454,9 +461,9 @@ tm_shape(NguliaSanctuary.RPI.Mean) +
 
 ```{r}
 ## Visualising Tsavo West IPZ - RPI 
-
-TsavoWestIPZ.RPI.Mask <- mask(RPI, TsavoWestIPZ)
 TsavoWestIPZ.RPI.Crop <- crop(TsavoWestIPZ.RPI.Mask, TsavoWestIPZ)
+TsavoWestIPZ.RPI.Mask <- mask(RPI, TsavoWestIPZ)
+
 
 # Averaging across years for visualization
 TsavoWestIPZ.RPI.Mean <- mean(TsavoWestIPZ.RPI.Crop, na.rm = TRUE)
@@ -488,9 +495,9 @@ tm_shape(TsavoWestIPZ.RPI.Mean) +
 
 ```{r}
 ## Visualising Tsavo West Rhino Range - RPI 
-
-TW.Rhino.Range.RPI.Mask <- mask(RPI, TW.Rhino.Range)
 TW.Rhino.Range.RPI.Crop <- crop(TW.Rhino.Range.RPI.Mask, TW.Rhino.Range)
+TW.Rhino.Range.RPI.Mask <- mask(RPI, TW.Rhino.Range)
+
 
 # Averaging across years for visualisation
 TW.Rhino.Range.RPI.Mean <- mean(TW.Rhino.Range.RPI.Crop, na.rm = TRUE)
@@ -521,10 +528,19 @@ tm_shape(TW.Rhino.Range.RPI.Mean) +
 ```
 
 ```{r}
+# Inspecting the Gap within the Rhino Range (Ngulia Sanctuary + IPZ) and the rest of Tsavo West NP in terms of RPI
 
+# Load the new datasets from GEE - (https://code.earthengine.google.com/?asset=projects/ee-imnduta1/assets/RPI_degradation_mapping)
+PMLv2.Kenya <- rast("C:/Users/IsaacM/OneDrive - African Wildlife Foundation/Datasets/Ngulia and Environs/PML_V2_Kenya_Drive_Export.tif")
+
+StudyPixelsKenya <- rast("C:/Users/IsaacM/OneDrive - African Wildlife Foundation/Datasets/Ngulia and Environs/studyPixels_Kenya_Export.tif")
 ```
 
-
+```{r}
+# Quick inspection of PMLv2's & StudyPixel's metadata (Check CRS and Resolution)
+print(PML_Kenya)
+print(StudyPixels)
+```
 
 
 
