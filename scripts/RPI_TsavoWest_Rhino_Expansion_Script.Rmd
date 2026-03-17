@@ -323,7 +323,7 @@ TsavoWestIPZ <-
 
 ```{r}
 # Merging Ngulia and IPZ into a single sf object (TW.Rhino.Range)
-TW.Rhino.Range <- dplyr::bind_rows(
+TsavoWest.Rhino.Range <- dplyr::bind_rows(
   NguliaSanctuary,
   TsavoWestIPZ
 )
@@ -333,12 +333,12 @@ TW.Rhino.Range <- dplyr::bind_rows(
 # Ensuring all CRS match
 RPI_CRS <- crs(RPI)
 TsavoWest <- st_transform(TsavoWest, RPI_CRS)
-TW.Rhino.Range <- st_transform(TW.Rhino.Range, RPI_CRS)
+TsavoWest.Rhino.Range <- st_transform(TsavoWest.Rhino.Range, RPI_CRS)
 ```
 
 ```{r}
 # Interactive Tsavo West Rhino Range (Ngulia Sanctuary + IPZ) 
-tm_shape(TW.Rhino.Range) +
+tm_shape(TsavoWest.Rhino.Range) +
   tm_polygons(
     fill = "orange",
     col = "black",
@@ -368,7 +368,7 @@ tm_shape(TsavoWest) +
     id = "NAME"
   ) +
 
-tm_shape(TW.Rhino.Range) +
+tm_shape(TsavoWest.Rhino.Range) +
   tm_polygons(
     fill = "orange",
     col = "black",
@@ -492,15 +492,15 @@ tm_shape(TsavoWestIPZ.RPI.Mean) +
 
 ```{r}
 ## Visualising Tsavo West Rhino Range - RPI 
-TW.Rhino.Range.RPI.Mask <- mask(RPI, TW.Rhino.Range)
-TW.Rhino.Range.RPI.Crop <- crop(TW.Rhino.Range.RPI.Mask, TW.Rhino.Range)
+TsavoWest.Rhino.Range.RPI.Mask <- mask(RPI, TsavoWest.Rhino.Range)
+TsavoWest.Rhino.Range.RPI.Crop <- crop(TsavoWest.Rhino.Range.RPI.Mask, TsavoWest.Rhino.Range)
 
 # Averaging across years for visualisation
-TW.Rhino.Range.RPI.Mean <- mean(TW.Rhino.Range.RPI.Crop, na.rm = TRUE)
+TsavoWest.Rhino.Range.RPI.Mean <- mean(TsavoWest.Rhino.Range.RPI.Crop, na.rm = TRUE)
 
 # Visualise
 tmap_mode("view")
-tm_shape(TW.Rhino.Range.RPI.Mean) +
+tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
   
   tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
             col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
@@ -524,6 +524,106 @@ tm_shape(TW.Rhino.Range.RPI.Mean) +
 ```
 
 ```{r}
+# Temporal Performance Overview
+```
+
+```{r}
+## Clipping Temporal Performance to Kenya Admin Boundary
+
+### Ensure CRS matches
+Kenya.Admin.Boundary <- st_transform(Kenya.Admin.Boundary, crs(Temporal.Performance))
+
+### Convert to terra vector
+Kenya.Admin.Boundary.Vect <- vect(Kenya.Admin.Boundary)
+
+### Crop and mask
+Temporal.Performance.Kenya <- crop(Temporal.Performance, Kenya.Admin.Boundary.Vect)
+Temporal.Performance.Kenya <- mask(Temporal.Performance.Kenya, Kenya.Admin.Boundary.Vect)
+```
+
+```{r}
+# Mapping Temporal Performance Metrics (MAE, RMSE, R²) across Kenya
+
+  # names(Temporal.Performance.Kenya) <- c("mae","rmse","rsq")
+
+# 1. MAE
+Map.MAE <- tm_shape(Temporal.Performance.Kenya[["mae"]]) +
+  tm_raster(
+  col.scale = tm_scale_intervals(values = "scico.roma", style = "quantile", n = 7, midpoint = NA),
+  col_alpha = 0.8,
+  col.legend = tm_legend(title = "MAE")
+) +
+  tm_shape(Kenya.Admin.Boundary) +
+  tm_borders(col = "black", lwd = 0.5) +
+  tm_title("Mean Absolute Error") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap")
+    )
+
+# 2. RMSE
+Map.RMSE <- tm_shape(Temporal.Performance.Kenya[["rmse"]]) +
+  tm_raster(
+    col.scale = tm_scale_intervals(values = "scico.vik", style = "quantile", n = 7, midpoint = NA),
+    col_alpha = 0.8,
+    col.legend = tm_legend(title = "RMSE")
+  ) +
+  tm_shape(Kenya.Admin.Boundary) +
+  tm_borders(col = "black", lwd = 0.5) +
+  tm_title("Root Mean Squared Error") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap")
+    )
+
+# 3. R²
+Map.Rsqd <- tm_shape(Temporal.Performance.Kenya[["rsq"]]) +
+  tm_raster(
+    col.scale = tm_scale_intervals(values = "scico.bam", style = "quantile", n = 7, midpoint = NA),
+    col_alpha = 0.8,
+    col.legend = tm_legend(title = expression(R^2))
+  ) +
+  tm_shape(Kenya.Admin.Boundary) +
+  tm_borders(col = "black", lwd = 0.5) +
+  tm_title(expression(R^2)) +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap")
+    )
+
+# Arrange side by side
+tmap_arrange(Map.MAE, Map.RMSE, Map.Rsqd, ncol = 3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
 # Inspecting the Gap within the Rhino Range (Ngulia Sanctuary + IPZ) and the rest of Tsavo West NP in terms of RPI
 
 # Load the new datasets from GEE - (https://code.earthengine.google.com/?asset=projects/ee-imnduta1/assets/RPI_degradation_mapping)
@@ -540,31 +640,10 @@ print(StudyPixelsKenya)
 
 ```{r}
 # Mapping the PMLv2 & StudyPixelKenya
-
-# Map 1: PMLv2 (Productivity & Energy Fluxes)
-PMLv2.Kenya.Map <- tm_shape(PMLv2.Kenya) +
-  tm_raster(
-    col.scale = tm_scale_intervals(
-      values = "viridis",   # continuous palette
-      style = "quantile",   # spread colors across data range
-      n = 7
-    ),
-    col_alpha = 0.8,
-    col.legend = tm_legend(title = "PMLv2 Variables")
-  ) +
-  tm_title("PMLv2 – Gross Primary Productivity(GPP), Canopy Transpiration(EC), Soil Evaporation (ES), Interception (EI)") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
-    )
-
-PMLv2.Kenya.Map
 ```
 
 ```{r}
-# Another way of mapping PMLv2.Kenya.Map
+# Map 1 -> PMLv2 (Productivity & Energy Fluxes)
 
 # 1. GPP (Gross Primary Productivity)
 PMLv2.GPP.Map <- tm_shape(PMLv2.Kenya[["GPP"]]) +
@@ -724,6 +803,10 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
 ```
 
 ```{r}
+
+```
+
+
 
 
 
