@@ -803,10 +803,428 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
 ```
 
 ```{r}
-
+# SECTION: Zone-Level RPI Summaries
+# Extracting pixel values per zone into data frames
+# for statistical comparison
 ```
 
+```{r}
+# Name RPI layers by Hydrological Year
+# 22 hydrological years: Sep 2000–Aug 2001 to Sep 2021–Aug 2022
 
+n_years <- nlyr(RPI)
+
+Hydro.Year.Labels <- paste0(
+  2000:(2000 + n_years - 1), "-",
+  substr(2001:(2001 + n_years - 1), 3, 4)
+)
+# e.g. "2000-01", "2001-02", ..., "2021-22"
+
+names(RPI) <- Hydro.Year.Labels
+```
+
+```{r}
+
+# Create "Tsavo West excl. Rhino Range" zone
+# This is the KEY comparison zone for the habitat gap analysis:
+# the broader park habitat that rhinos could potentially expand into
+
+TsavoWest.Excl.RhinoRange <- st_difference(
+  TsavoWest,
+  st_union(TsavoWest.Rhino.Range)  |> st_transform(st_crs(TsavoWest))
+)
+```
+
+```{r}
+
+# Reusable extraction function
+# Extracts all pixel values from the RPI stack for a given zone
+# Returns a long-format tibble (one row per pixel per year)
+
+extract_rpi_pixels <- function(raster_stack, boundary_sf, zone_name, year_labels) {
+  
+  boundary_vect <- vect(boundary_sf)
+  
+  terra::extract(raster_stack, boundary_vect, xy = TRUE) |>
+    as_tibble() |>
+    mutate(ZONE = zone_name) |>
+    pivot_longer(
+      cols      = all_of(year_labels),
+      names_to  = "Hydro.Year",
+      values_to = "RPI"
+    ) |>
+    filter(!is.na(RPI)) |>
+    mutate(
+      Year.Start = as.integer(substr(Hydro.Year, 1, 4)),  # numeric year for trend fitting
+      ZONE = factor(ZONE)
+    )
+}
+```
+
+```{r}
+# Extract pixel values for all zones
+
+cat("Extracting RPI pixels — Tsavo West NP...\n")
+RPI.Pixels.TsavoWest <- extract_rpi_pixels(
+  RPI, TsavoWest, "Tsavo West NP", Hydro.Year.Labels
+)
+
+cat("Extracting RPI pixels — Ngulia Sanctuary...\n")
+RPI.Pixels.Ngulia <- extract_rpi_pixels(
+  RPI, NguliaSanctuary, "Ngulia Sanctuary", Hydro.Year.Labels
+)
+
+cat("Extracting RPI pixels — Intensive Protection Zone...\n")
+RPI.Pixels.IPZ <- extract_rpi_pixels(
+  RPI, TsavoWestIPZ, "Intensive Protection Zone", Hydro.Year.Labels
+)
+
+cat("Extracting RPI pixels — Tsavo West Rhino Range (combined)...\n")
+RPI.Pixels.RhinoRange <- extract_rpi_pixels(
+  RPI, TsavoWest.Rhino.Range, "Rhino Range (Ngulia + IPZ)", Hydro.Year.Labels
+)
+
+cat("Extracting RPI pixels — Tsavo West excl. Rhino Range...\n")
+RPI.Pixels.TW.Excl <- extract_rpi_pixels(
+  RPI, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)", Hydro.Year.Labels
+)
+```
+
+```{r}
+# Combine all zones into one master pixel-level data frame
+
+RPI.All.Zones.Pixels <- bind_rows(
+  RPI.Pixels.TsavoWest,
+  RPI.Pixels.Ngulia,
+  RPI.Pixels.IPZ,
+  RPI.Pixels.RhinoRange,
+  RPI.Pixels.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(
+      ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    )
+  )
+
+cat("Master pixel data frame dimensions:", dim(RPI.All.Zones.Pixels), "\n")
+```
+
+```{r}
+# Annual summary table (Zone × Year)
+# Used for time-series plots and trend analysis
+
+RPI.Zone.Annual.Summary <- RPI.All.Zones.Pixels |>
+  group_by(ZONE, Hydro.Year, Year.Start) |>
+  summarise(
+    Mean.RPI    = mean(RPI,                    na.rm = TRUE),
+    Median.RPI  = median(RPI,                  na.rm = TRUE),
+    SD.RPI      = sd(RPI,                      na.rm = TRUE),
+    Q10.RPI     = quantile(RPI, probs = 0.10,  na.rm = TRUE),
+    Q25.RPI     = quantile(RPI, probs = 0.25,  na.rm = TRUE),
+    Q75.RPI     = quantile(RPI, probs = 0.75,  na.rm = TRUE),
+    Q90.RPI     = quantile(RPI, probs = 0.90,  na.rm = TRUE),
+    N.Pixels    = n(),
+    .groups     = "drop"
+  )
+```
+
+```{r}
+# Overall summary table (Zone × all years combined)
+# Used for the static habitat gap comparison
+
+RPI.Zone.Overall.Summary <- RPI.All.Zones.Pixels |>
+  group_by(ZONE) |>
+  summarise(
+    Mean.RPI        = mean(RPI,                    na.rm = TRUE),
+    Median.RPI      = median(RPI,                  na.rm = TRUE),
+    SD.RPI          = sd(RPI,                      na.rm = TRUE),
+    Q10.RPI         = quantile(RPI, probs = 0.10,  na.rm = TRUE),
+    Q25.RPI         = quantile(RPI, probs = 0.25,  na.rm = TRUE),
+    Q75.RPI         = quantile(RPI, probs = 0.75,  na.rm = TRUE),
+    Q90.RPI         = quantile(RPI, probs = 0.90,  na.rm = TRUE),
+    N.Pixels.Total  = n(),
+    .groups         = "drop"
+  )
+
+# Quick print to verify
+print(RPI.Zone.Overall.Summary)
+```
+
+```{r}
+# SECTION EXTENSION: PMLv2 & StudyPixels Zone Extractions
+# Building a unified habitat profile per zone combining:
+# → Productivity (RPI)
+# → Water-energy fluxes (PMLv2)
+# → Land cover composition (StudyPixels)
+```
+
+```{r}
+# Confirm band names before extracting
+
+cat("PMLv2 band names:     ", names(PMLv2.Kenya), "\n")
+cat("StudyPixels band names:", names(StudyPixelsKenya), "\n")
+```
+
+```{r}
+# Align CRS of PMLv2 and StudyPixels to RPI CRS
+# (already done for vector layers; doing same for rasters)
+
+PMLv2.Kenya       <- project(PMLv2.Kenya,       crs(RPI))
+StudyPixelsKenya  <- project(StudyPixelsKenya,   crs(RPI), method = "near")
+# Note: method = "near" for StudyPixels because IGBP is categorical
+# (nearest-neighbour preserves class integer values)
+```
+
+```{r}
+# Clip PMLv2 and StudyPixels to Tsavo West NP extent
+# Reduces memory and focuses on the study area
+
+TsavoWest.Vect <- vect(TsavoWest)
+
+PMLv2.TsavoWest      <- crop(PMLv2.Kenya,      TsavoWest.Vect) |>
+                         mask(TsavoWest.Vect)
+
+StudyPixels.TsavoWest <- crop(StudyPixelsKenya, TsavoWest.Vect) |>
+                          mask(TsavoWest.Vect)
+```
+
+```{r}
+# Reusable extraction function for continuous multi-band rasters (PMLv2 fluxes + cover bands)
+# Returns a long-format tibble: one row per pixel per band
+
+extract_multiband_pixels <- function(raster_stack, boundary_sf, zone_name) {
+  
+  boundary_vect <- vect(boundary_sf)
+  band_names    <- names(raster_stack)
+  
+  terra::extract(raster_stack, boundary_vect, xy = TRUE) |>
+    as_tibble() |>
+    mutate(ZONE = zone_name) |>
+    pivot_longer(
+      cols      = all_of(band_names),
+      names_to  = "Band",
+      values_to = "Value"
+    ) |>
+    filter(!is.na(Value)) |>
+    mutate(ZONE = factor(ZONE))
+}
+```
+
+```{r}
+# Extract PMLv2 pixel values per zone
+# (GPP, Ec, Es, Ei — all continuous)
+
+cat("Extracting PMLv2 pixels — Tsavo West NP...\n")
+PMLv2.Pixels.TsavoWest <- extract_multiband_pixels(
+  PMLv2.TsavoWest, TsavoWest, "Tsavo West NP"
+)
+
+cat("Extracting PMLv2 pixels — Ngulia Sanctuary...\n")
+PMLv2.Pixels.Ngulia <- extract_multiband_pixels(
+  PMLv2.TsavoWest, NguliaSanctuary, "Ngulia Sanctuary"
+)
+
+cat("Extracting PMLv2 pixels — Intensive Protection Zone...\n")
+PMLv2.Pixels.IPZ <- extract_multiband_pixels(
+  PMLv2.TsavoWest, TsavoWestIPZ, "Intensive Protection Zone"
+)
+
+cat("Extracting PMLv2 pixels — Rhino Range (combined)...\n")
+PMLv2.Pixels.RhinoRange <- extract_multiband_pixels(
+  PMLv2.TsavoWest, TsavoWest.Rhino.Range, "Rhino Range (Ngulia + IPZ)"
+)
+
+cat("Extracting PMLv2 pixels — Tsavo West excl. Rhino Range...\n")
+PMLv2.Pixels.TW.Excl <- extract_multiband_pixels(
+  PMLv2.TsavoWest, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)"
+)
+
+# Combine all PMLv2 zone pixels
+PMLv2.All.Zones.Pixels <- bind_rows(
+  PMLv2.Pixels.TsavoWest,
+  PMLv2.Pixels.Ngulia,
+  PMLv2.Pixels.IPZ,
+  PMLv2.Pixels.RhinoRange,
+  PMLv2.Pixels.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(
+      ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    ),
+    # Clarify band labels for plotting later
+    Band = fct_recode(Band,
+      "GPP (gC/m²/yr)"           = "GPP",
+      "Canopy Transpiration (mm)" = "Ec",
+      "Soil Evaporation (mm)"     = "Es",
+      "Interception (mm)"         = "Ei"
+    )
+  )
+```
+
+```{r}
+# Extract StudyPixels — continuous cover bands only
+#   (trees, shrubland, grassland, bare, allRangelands)
+# IGBP handled separately below (Next section) as it is categorical
+
+StudyPixels.Continuous <- StudyPixels.TsavoWest[[
+  c("trees", "shrubland", "grassland", "bare", "allRangelands")
+]]
+
+cat("Extracting StudyPixels (continuous) — Tsavo West NP...\n")
+Cover.Pixels.TsavoWest <- extract_multiband_pixels(
+  StudyPixels.Continuous, TsavoWest, "Tsavo West NP"
+)
+
+cat("Extracting StudyPixels (continuous) — Ngulia Sanctuary...\n")
+Cover.Pixels.Ngulia <- extract_multiband_pixels(
+  StudyPixels.Continuous, NguliaSanctuary, "Ngulia Sanctuary"
+)
+
+cat("Extracting StudyPixels (continuous) — Intensive Protection Zone...\n")
+Cover.Pixels.IPZ <- extract_multiband_pixels(
+  StudyPixels.Continuous, TsavoWestIPZ, "Intensive Protection Zone"
+)
+
+cat("Extracting StudyPixels (continuous) — Rhino Range (combined)...\n")
+Cover.Pixels.RhinoRange <- extract_multiband_pixels(
+  StudyPixels.Continuous, TsavoWest.Rhino.Range, "Rhino Range (Ngulia + IPZ)"
+)
+
+cat("Extracting StudyPixels (continuous) — Tsavo West excl. Rhino Range...\n")
+Cover.Pixels.TW.Excl <- extract_multiband_pixels(
+  StudyPixels.Continuous, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)"
+)
+
+# Combine all cover zone pixels
+Cover.All.Zones.Pixels <- bind_rows(
+  Cover.Pixels.TsavoWest,
+  Cover.Pixels.Ngulia,
+  Cover.Pixels.IPZ,
+  Cover.Pixels.RhinoRange,
+  Cover.Pixels.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(
+      ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    ),
+    Band = fct_recode(Band,
+      "Tree Cover (%)"       = "trees",
+      "Shrubland Cover (%)"  = "shrubland",
+      "Grassland Cover (%)"  = "grassland",
+      "Bare Ground (%)"      = "bare",
+      "All Rangelands (%)"   = "allRangelands"
+    )
+  )
+```
+
+```{r}
+# Extract StudyPixels — IGBP categorical band
+# Summarised as class frequency (%) per zone rather than
+# pixel-level values, since it is a nominal variable
+
+extract_igbp_freq <- function(raster_stack, boundary_sf, zone_name) {
+  
+  boundary_vect <- vect(boundary_sf)
+  
+  terra::extract(raster_stack[["igbp"]], boundary_vect) |>
+    as_tibble() |>
+    rename(IGBP_Class = igbp) |>
+    filter(!is.na(IGBP_Class)) |>
+    count(IGBP_Class) |>
+    mutate(
+      ZONE        = zone_name,
+      Pct_Pixels  = n / sum(n) * 100,
+      # Decode IGBP integer codes to labels
+      IGBP_Label  = case_when(
+        IGBP_Class == 6  ~ "Closed Shrubland",
+        IGBP_Class == 7  ~ "Open Shrubland",
+        IGBP_Class == 8  ~ "Woody Savanna",
+        IGBP_Class == 9  ~ "Savanna",
+        IGBP_Class == 10 ~ "Grassland",
+        TRUE             ~ paste0("Class ", IGBP_Class)
+      )
+    )
+}
+
+IGBP.TsavoWest  <- extract_igbp_freq(StudyPixels.TsavoWest, TsavoWest,                  "Tsavo West NP")
+IGBP.Ngulia     <- extract_igbp_freq(StudyPixels.TsavoWest, NguliaSanctuary,             "Ngulia Sanctuary")
+IGBP.IPZ        <- extract_igbp_freq(StudyPixels.TsavoWest, TsavoWestIPZ,                "Intensive Protection Zone")
+IGBP.RhinoRange <- extract_igbp_freq(StudyPixels.TsavoWest, TsavoWest.Rhino.Range,       "Rhino Range (Ngulia + IPZ)")
+IGBP.TW.Excl    <- extract_igbp_freq(StudyPixels.TsavoWest, TsavoWest.Excl.RhinoRange,   "Tsavo West (excl. Rhino Range)")
+
+IGBP.All.Zones <- bind_rows(
+  IGBP.TsavoWest,
+  IGBP.Ngulia,
+  IGBP.IPZ,
+  IGBP.RhinoRange,
+  IGBP.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(
+      ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    )
+  )
+```
+
+```{r}
+# Build the Unified Zone Profile Table
+# One row per zone — combines RPI + PMLv2 + land cover means
+# This is the master comparison table for the habitat gap analysis
+
+# 15a. PMLv2 summary per zone (wide format)
+PMLv2.Zone.Summary <- PMLv2.All.Zones.Pixels |>
+  group_by(ZONE, Band) |>
+  summarise(Mean = mean(Value, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = Band, values_from = Mean) |>
+  rename_with(~ paste0("Mean.", gsub("[^A-Za-z]", ".", .x)),
+              .cols = -ZONE)
+
+# 15b. Cover summary per zone (wide format)
+Cover.Zone.Summary <- Cover.All.Zones.Pixels |>
+  group_by(ZONE, Band) |>
+  summarise(Mean = mean(Value, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = Band, values_from = Mean) |>
+  rename_with(~ paste0("Mean.", gsub("[^A-Za-z]", ".", .x)),
+              .cols = -ZONE)
+
+# 15c. Dominant IGBP class per zone
+IGBP.Dominant <- IGBP.All.Zones |>
+  group_by(ZONE) |>
+  slice_max(Pct_Pixels, n = 1) |>
+  select(ZONE, Dominant.IGBP = IGBP_Label, Dominant.IGBP.Pct = Pct_Pixels) |>
+  ungroup()
+
+# 15d. Join everything into the unified profile table
+Unified.Zone.Profile <- RPI.Zone.Overall.Summary |>
+  left_join(PMLv2.Zone.Summary,  by = "ZONE") |>
+  left_join(Cover.Zone.Summary,  by = "ZONE") |>
+  left_join(IGBP.Dominant,       by = "ZONE")
+
+# Print the unified profile
+print(Unified.Zone.Profile)
+```
+
+```{r}
 
 
 
