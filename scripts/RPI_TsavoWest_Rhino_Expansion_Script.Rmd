@@ -604,25 +604,6 @@ Map.Rsqd <- tm_shape(Temporal.Performance.Kenya[["rsq"]]) +
 tmap_arrange(Map.MAE, Map.RMSE, Map.Rsqd, ncol = 3)
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
 # Inspecting the Gap within the Rhino Range (Ngulia Sanctuary + IPZ) and the rest of Tsavo West NP in terms of RPI
 
