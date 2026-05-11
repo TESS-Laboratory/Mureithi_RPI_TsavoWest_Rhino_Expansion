@@ -1364,7 +1364,39 @@ print(Unified.Zone.Profile)
 ```
 
 ```{r}
+# Cover columns above are in proportions not percentages
+# Confirm the issue
+Cover.All.Zones.Pixels |>
+  group_by(Band) |>
+  summarise(Min = min(Value), Max = max(Value))
 
+# If values are still 0-1, apply the fix and rebuild
+Cover.All.Zones.Pixels <- Cover.All.Zones.Pixels |>
+  mutate(Value = Value * 100)
+
+# Rebuild cover summary
+Cover.Zone.Summary <- Cover.All.Zones.Pixels |>
+  group_by(ZONE, Band) |>
+  summarise(Mean = mean(Value, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = Band, values_from = Mean) |>
+  rename_with(~ paste0("Mean.", gsub("[^A-Za-z]", ".", .x)), .cols = -ZONE)
+
+# Rebuild unified profile
+Unified.Zone.Profile <- RPI.Zone.Overall.Summary |>
+  left_join(PMLv2.Zone.Summary,  by = "ZONE") |>
+  left_join(Cover.Zone.Summary,  by = "ZONE") |>
+  left_join(IGBP.Dominant,       by = "ZONE")
+
+# Verify cover columns now show percentages
+Unified.Zone.Profile |>
+  select(ZONE, 
+         Mean.Shrubland.Cover....,
+         Mean.Grassland.Cover....,
+         Mean.Tree.Cover....,
+         Mean.Bare.Ground....)
+```
+
+```{r}
 
 
 
