@@ -1837,3 +1837,396 @@ tmap_arrange(Map.SenSlope, Map.SenSlope.Significant, Map.TrendCategory, ncol = 3
 ```
 
 ```{r}
+# SECTION 3: Habitat Gap Analysis
+# Visualising the productivity gap between the Rhino Range & the rest of Tsavo West NP across space and time
+```
+
+```{r}
+# Shared colour palette — used consistently across all figures so zones are always identifiable by the same colour
+
+Zone.Colours <- c(
+  "Tsavo West NP"                  = "#4d4d4d",   # Dark grey
+  "Tsavo West (excl. Rhino Range)" = "#d95f02",   # Orange-brown
+  "Rhino Range (Ngulia + IPZ)"     = "#1b7837",   # Dark green
+  "Ngulia Sanctuary"               = "#762a83",   # Purple
+  "Intensive Protection Zone"      = "#74c476"    # Light green
+)
+
+Zone.Linetypes <- c(
+  "Tsavo West NP"                  = "dotted",
+  "Tsavo West (excl. Rhino Range)" = "dashed",
+  "Rhino Range (Ngulia + IPZ)"     = "solid",
+  "Ngulia Sanctuary"               = "solid",
+  "Intensive Protection Zone"      = "solid"
+)
+
+# Shared theme for all ggplot2 figures in this section
+theme_rpi <- function() {
+  theme_bw() +
+    theme(
+      text = element_text(family = "Helvetica"),
+      axis.text = element_text(size = 8, color = "black"),
+      axis.title = element_text(size = 8, color = "black"),
+      axis.line.x = element_line(linewidth = 0.3, color = "black"), # Use linewidth
+      axis.line.y = element_line(linewidth = 0.3, color = "black"), # Use linewidth
+      axis.ticks = element_line(linewidth = 0.3, color = "black"), # Use linewidth
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"),
+      plot.title = element_text(
+        size = 8,
+        vjust = 1,
+        hjust = 0.5,
+        color = "black"
+      ),
+      legend.text = element_text(size = 8, color = "black"),
+      legend.title = element_text(size = 8, color = "black"),
+      legend.position = "right", # Move legend to the right
+      legend.key.size = unit(0.9, "line"),
+      legend.background = element_rect(
+        color = "black",
+        fill = "transparent",
+        linewidth = 0.3, # Use linewidth
+        linetype = "blank"
+      )
+    )
+}
+
+# Attempt to set the Helvetica font (may not work on all systems)
+if (Sys.info()[["sysname"]] == "Windows") {
+  windowsFonts("Helvetica" = windowsFont("Helvetica"))
+}
+```
+
+```{r}
+# FIGURE 3.1: RPI Distribution Comparison -> This is the single most powerful static comparison figure.
+
+  # Violin + Box plot — full pixel-level distributions per zone
+    # Draws from "RPI.All.Zones.Pixels":
+      # Shows the full pixel-level RPI distribution per zone — the violin gives the shape, the box gives Q25/median/Q75, and individual outlier points are suppressed given the pixel count. 
+
+# Subsample pixels for plotting efficiency
+# (717,000 × 5 zones is too many points for smooth rendering)
+set.seed(42)
+RPI.Plot.Sample <- RPI.All.Zones.Pixels |>
+  group_by(ZONE) |>
+  slice_sample(n = 5000) |>
+  ungroup()
+
+Fig3.1.RPI.Distribution.Comparison <- ggplot(
+  RPI.Plot.Sample,
+  aes(x = ZONE, y = RPI, fill = ZONE, colour = ZONE)
+) +
+
+  # Violin — full distribution shape
+  geom_violin(
+    alpha      = 0.35,
+    linewidth  = 0.4,
+    trim       = TRUE,
+    scale      = "width"
+  ) +
+
+  # Boxplot inside violin — Q25, median, Q75
+  geom_boxplot(
+    width         = 0.15,
+    alpha         = 0.7,
+    linewidth     = 0.5,
+    outlier.shape = NA     # suppress outlier dots given pixel count
+  ) +
+
+  # Median point
+  stat_summary(
+    fun      = median,
+    geom     = "point",
+    shape    = 21,
+    size     = 2.5,
+    fill     = "white",
+    colour   = "black",
+    stroke   = 0.8
+  ) +
+
+  # Reference line at RPI = 1 (actual GPP = potential GPP)
+  geom_hline(
+    yintercept = 1,
+    linetype   = "dashed",
+    colour     = "grey40",
+    linewidth  = 0.5
+  ) +
+
+  annotate(
+    "text",
+    x     = 5.4,
+    y     = 1.02,
+    label = "RPI = 1\n(Actual = Potential)",
+    size  = 2.8,
+    colour = "grey40",
+    hjust  = 1
+  ) +
+
+  scale_fill_manual(values = Zone.Colours)   +
+  scale_colour_manual(values = Zone.Colours) +
+  scale_x_discrete(
+    labels = function(x) stringr::str_wrap(x, width = 14)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1.5),
+    breaks = seq(0, 1.5, by = 0.25)
+  ) +
+
+  labs(
+    title    = "Relative Productivity Index Distribution by Zone",
+    subtitle = "Tsavo West National Park — Hydrological Years 2000–2023",
+    x        = NULL,
+    y        = "Relative Productivity Index (RPI)",
+    caption  = "Each violin shows the full pixel-level RPI distribution (n = 5,000 pixels sampled per zone).\nBoxplot shows Q25, median, Q75. White point = median. Dashed line = RPI of 1 (actual GPP = potential GPP)."
+  ) +
+
+  theme_rpi() +
+  theme(legend.position = "none")   # x-axis labels are sufficient
+
+Fig3.1.RPI.Distribution.Comparison
+```
+
+```{r}
+# FIGURE 3.2: Annual RPI Time Series with Rolling Mean
+  # Focused on the three key comparison zones
+
+    # Draws from "RPI.Zone.Annual.Summary": 
+      # One line per zone across 2000–2023, with a shaded Q25–Q75 ribbon for uncertainty and the 5-year rolling mean overlaid as a bolder line. Focuses on the three key zones: Tsavo West NP, Tsavo West excl. Rhino Range, and Rhino Range combined.
+
+# Filter to the three key zones for clarity
+Key.Zones <- c(
+  "Tsavo West NP",
+  "Tsavo West (excl. Rhino Range)",
+  "Rhino Range (Ngulia + IPZ)"
+)
+
+RPI.TimeSeries.Data <- RPI.Zone.Annual.Summary |>
+  filter(ZONE %in% Key.Zones) |>
+  mutate(ZONE = fct_relevel(ZONE, Key.Zones))
+
+Fig3.2.RPI.TimeSeries.RollingMean <- ggplot(
+  RPI.TimeSeries.Data,
+  aes(x = Year.Start, colour = ZONE, fill = ZONE)
+) +
+
+  # Uncertainty ribbon — Q25 to Q75
+  geom_ribbon(
+    aes(ymin = Q25.RPI, ymax = Q75.RPI),
+    alpha     = 0.12,
+    linewidth = 0,
+    show.legend = FALSE
+  ) +
+
+  # Annual mean — thin line
+  geom_line(
+    aes(y = Mean.RPI, linetype = ZONE),
+    linewidth = 0.55,
+    alpha     = 0.65
+  ) +
+
+  # 5-year rolling mean — bold line
+  geom_line(
+    aes(y = Rolling.Mean.5yr, linetype = ZONE),
+    linewidth = 1.1,
+    alpha     = 1
+  ) +
+
+  # Mark the rolling mean with a subtle point at each year
+  geom_point(
+    aes(y = Rolling.Mean.5yr),
+    size  = 1.5,
+    shape = 21,
+    fill  = "white",
+    stroke = 0.6
+  ) +
+
+  scale_colour_manual(values = Zone.Colours[Key.Zones])   +
+  scale_fill_manual(values   = Zone.Colours[Key.Zones])   +
+  scale_linetype_manual(values = Zone.Linetypes[Key.Zones]) +
+
+  scale_x_continuous(
+    breaks = seq(2000, 2022, by = 2),
+    labels = paste0(seq(2000, 2022, by = 2), "\n–",
+                    substr(seq(2001, 2023, by = 2), 3, 4))
+  ) +
+
+  scale_y_continuous(
+    limits = c(0.45, 0.95),
+    breaks = seq(0.45, 0.95, by = 0.10)
+  ) +
+
+  labs(
+    title    = "Annual Mean RPI Trajectory by Zone (2000–2023)",
+    subtitle = "Thin line = annual mean | Bold line = 5-year rolling mean | Ribbon = interquartile range (Q25–Q75)",
+    x        = "Hydrological Year",
+    y        = "Mean Relative Productivity Index (RPI)",
+    colour   = "Zone",
+    fill     = "Zone",
+    linetype = "Zone",
+    caption  = "RPI = Actual GPP / Potential GPP. Potential GPP estimated via quantile regression forest (Lomax et al.).\nHydrological year runs September–August."
+  ) +
+
+  theme_rpi() +
+  theme(
+    legend.position  = "bottom",
+    legend.direction = "vertical"
+  )
+
+Fig3.2.RPI.TimeSeries.RollingMean
+```
+
+```{r}
+# FIGURE 3.3: RPI Gap Trajectory (Rhino Range vs TW excl.)
+
+    # Draws from "RPI.Gap.Annual": 
+      # A single panel showing the annual gap and its 5-year rolling mean, with a horizontal reference line at zero and an annotated stable trend finding from Section 2.
+
+Fig3.3.Gap.Trajectory <- ggplot(
+  RPI.Gap.Annual,
+  aes(x = Year.Start)
+) +
+
+  # Zero reference line — gap = 0 means zones are equal
+  geom_hline(
+    yintercept = 0,
+    linetype   = "dashed",
+    colour     = "grey40",
+    linewidth  = 0.6
+  ) +
+
+  # Shade positive gap (Rhino Range > TW excl.) in green
+  geom_ribbon(
+    aes(ymin = 0, ymax = pmax(RPI.Gap, 0)),
+    fill  = "#1b7837",
+    alpha = 0.15
+  ) +
+
+  # Shade negative gap (rare years where TW excl. > Rhino Range) in orange
+  geom_ribbon(
+    aes(ymin = pmin(RPI.Gap, 0), ymax = 0),
+    fill  = "#d95f02",
+    alpha = 0.15
+  ) +
+
+  # Annual raw gap
+  geom_line(
+    aes(y = RPI.Gap),
+    colour    = "grey50",
+    linewidth = 0.55,
+    linetype  = "solid"
+  ) +
+
+  geom_point(
+    aes(y = RPI.Gap),
+    colour = "grey50",
+    size   = 1.8,
+    shape  = 21,
+    fill   = "white"
+  ) +
+
+  # 5-year rolling gap — bold
+  geom_line(
+    aes(y = RPI.Gap.Rolling),
+    colour    = "#1b7837",
+    linewidth = 1.2
+  ) +
+
+  # Trend annotation from Section 2 results
+  annotate(
+    "text",
+    x      = 2001,
+    y      = 0.21,
+    label  = "Gap is stable (Sen's slope = +0.000440/yr, p = 1.00, ns)",
+    size   = 3.0,
+    colour = "grey30",
+    hjust  = 0,
+    fontface = "italic"
+  ) +
+
+  scale_x_continuous(
+    breaks = seq(2000, 2022, by = 2),
+    labels = paste0(seq(2000, 2022, by = 2), "\n–",
+                    substr(seq(2001, 2023, by = 2), 3, 4))
+  ) +
+
+  scale_y_continuous(
+    breaks = seq(-0.05, 0.25, by = 0.05),
+    labels = scales::number_format(accuracy = 0.01)
+  ) +
+
+  labs(
+    title    = "RPI Productivity Gap: Rhino Range vs. Tsavo West (excl. Rhino Range)",
+    subtitle = "Grey line = annual gap | Green bold line = 5-year rolling mean | Green shading = Rhino Range more productive",
+    x        = "Hydrological Year",
+    y        = "RPI Gap (Rhino Range − Tsavo West excl.)",
+    caption  = "Positive values indicate the Rhino Range is more productive than the potential expansion zone.\nTheil-Sen slope applied to annual gap series. Shaded band below zero indicates years where gap briefly reverses."
+  ) +
+
+  theme_rpi()
+
+Fig3.3.Gap.Trajectory
+```
+
+```{r}
+# FIGURE 3.4: Spatial RPI Gap Map (tmap)
+  # Mean RPI raster — Rhino Range zones highlighted
+
+    # A raster map of pixel-level mean RPI difference — Rhino Range pixels highlighted against the broader Tsavo West context.
+
+tmap_mode("view")
+
+Fig3.4.RPI.Spatial.Gap.Map <- tm_shape(TsavoWest.RPI.Mean) +
+  tm_raster(
+    col.scale = tm_scale_continuous(
+      values   = "viridis",
+      limits   = c(0.4, 1.0)
+    ),
+    col_alpha  = 0.85,
+    col.legend = tm_legend(
+      title   = "Mean RPI\n(2000–2023)",
+      reverse = TRUE
+    )
+  ) +
+
+  tm_shape(TsavoWest) +
+  tm_borders(col = "white", lwd = 2) +
+
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill       = NA,
+    fill_alpha = 0,
+    col        = "#f7f7f7",
+    lwd        = 2.5,
+    id         = "NAME"
+  ) +
+
+  tm_shape(NguliaSanctuary) +
+  tm_polygons(
+    fill       = NA,
+    fill_alpha = 0,
+    col        = "#762a83",
+    lwd        = 2,
+    id         = "NAME"
+  ) +
+
+  tm_title(
+    "Spatial Distribution of Mean RPI — Tsavo West NP (2000–2023)\nWhite outline = Rhino Range | Purple outline = Ngulia Sanctuary"
+  ) +
+
+  tm_layout(legend.outside = TRUE) +
+
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  ))
+
+Fig3.4.RPI.Spatial.Gap.Map
+```
+
+```{r}
