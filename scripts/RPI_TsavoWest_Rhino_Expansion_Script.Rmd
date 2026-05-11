@@ -2067,7 +2067,7 @@ Fig3.2.RPI.TimeSeries.RollingMean <- ggplot(
     colour   = "Zone",
     fill     = "Zone",
     linetype = "Zone",
-    caption  = "RPI = Actual GPP / Potential GPP. Potential GPP estimated via quantile regression forest (Lomax et al.).\nHydrological year runs September–August."
+    caption  = "RPI = Actual GPP / Potential GPP. Potential GPP estimated via quantile regression forest (Lomax et al.2025).\nHydrological year runs September–August."
   ) +
 
   theme_rpi() +
