@@ -1637,8 +1637,9 @@ print(RPI.Pixel.Trend.Summary)
 Map.SenSlope <- tm_shape(RPI.Trend.Raster[["Sen.Slope"]]) +
   tm_raster(
     col.scale = tm_scale_continuous(
-      values   = "ggplot2.rdylgn",   # Red = decline, Green = increase
-      midpoint = 0
+      values   = "brewer.rd_yl_gn", 
+      # Midpoint at 0 ensures Red=Negative, Green=Positive
+      midpoint = 0 
     ),
     col_alpha = 0.85,
     col.legend = tm_legend(
@@ -1649,9 +1650,9 @@ Map.SenSlope <- tm_shape(RPI.Trend.Raster[["Sen.Slope"]]) +
   tm_borders(col = "black", lwd = 2) +
   tm_shape(TsavoWest.Rhino.Range) +
   tm_polygons(
-    fill       = NA,
+    fill       = "white", # Set a color but use alpha 0 for transparency
     fill_alpha = 0,
-    col        = "white",
+    col        = "black", # Black or dark blue for contrast against the green/red
     lwd        = 2,
     id         = "NAME"
   ) +
@@ -1674,7 +1675,7 @@ Map.SenSlope
 Map.SenSlope.Significant <- tm_shape(RPI.Trend.Significant) +
   tm_raster(
     col.scale = tm_scale_continuous(
-      values   = "ggplot2.rdylgn",
+      values   = "brewer.rd_yl_gn", 
       midpoint = 0
     ),
     col_alpha = 0.9,
@@ -1686,7 +1687,7 @@ Map.SenSlope.Significant <- tm_shape(RPI.Trend.Significant) +
   tm_borders(col = "black", lwd = 2) +
   tm_shape(TsavoWest.Rhino.Range) +
   tm_polygons(
-    fill       = NA,
+    fill       = "white", 
     fill_alpha = 0,
     col        = "white",
     lwd        = 2,
