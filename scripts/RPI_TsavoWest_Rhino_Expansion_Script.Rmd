@@ -1405,9 +1405,9 @@ Unified.Zone.Profile |>
 
 ```{r}
 # Step 1: Add 5-year rolling mean to the annual summary table
-# Uses slider::slide_dbl() — centred window, .before=2, .after=2
-# Smooths interannual rainfall-driven variability so the
-# underlying productivity trend is easier to interpret
+  # Uses slider::slide_dbl() — centred window, .before=2, .after=2
+  # Smooths interannual rainfall-driven variability so the
+  # underlying productivity trend is easier to interpret
 
 RPI.Zone.Annual.Summary <- RPI.Zone.Annual.Summary |>
   group_by(ZONE) |>
@@ -1433,10 +1433,10 @@ RPI.Zone.Annual.Summary |>
 
 ```{r}
 # Step 2: Zone-level Theil-Sen slopes
-# Applied to each zone's 22-year annual mean RPI time series
-# trend::sens.slope() performs both:
-#   → Sen's slope (median of all pairwise slopes) = magnitude
-#   → Mann-Kendall test = statistical significance
+  # Applied to each zone's 22-year annual mean RPI time series
+  # trend::sens.slope() performs both:
+  #   → Sen's slope (median of all pairwise slopes) = magnitude
+  #   → Mann-Kendall test = statistical significance
 
 RPI.Zone.Trends <- RPI.Zone.Annual.Summary |>
   group_by(ZONE) |>
@@ -1472,10 +1472,10 @@ print(RPI.Zone.Trends)
 
 ```{r}
 # Step 3: Pixel-level Theil-Sen slope raster
-# Applied to each pixel's 22-year RPI time series independently
-# Produces a 2-band raster:
-#   Band 1 → Sen's slope (trend magnitude per year)
-#   Band 2 → Mann-Kendall p-value (statistical significance)
+  # Applied to each pixel's 22-year RPI time series independently
+  # Produces a 2-band raster:
+  #   Band 1 → Sen's slope (trend magnitude per year)
+  #   Band 2 → Mann-Kendall p-value (statistical significance)
 
 # Helper function — applied to each pixel's time series vector
 compute_pixel_sens_slope <- function(x) {
@@ -1513,9 +1513,8 @@ global(RPI.Trend.Significant, "mean", na.rm = TRUE)
 
 ```{r}
 # Step 4: RPI gap trajectory analysis
-# The core expansion feasibility question:
-# Is the productivity advantage of the Rhino Range over the
-# rest of Tsavo West growing, shrinking, or stable over time?
+  # The core expansion feasibility question:
+    # Is the productivity advantage of the Rhino Range over the rest of Tsavo West growing, shrinking, or stable over time?
 
 RPI.Gap.Annual <- RPI.Zone.Annual.Summary |>
   filter(ZONE %in% c(
@@ -1576,8 +1575,7 @@ print(RPI.Gap.Annual |> select(Hydro.Year, RPI.Gap, RPI.Gap.Rolling))
 
 ```{r}
 # Step 5: Pixel-level trend breakdown by zone
-# Summarise what % of pixels in each zone show
-# significant positive, significant negative, or no trend
+  # Summarise what % of pixels in each zone show significant positive, significant negative, or no trend
 
 # Extract Sen.Slope and P.Value per pixel per zone
 extract_trend_pixels <- function(trend_raster, boundary_sf, zone_name) {
@@ -1626,6 +1624,151 @@ RPI.Pixel.Trend.Summary <- bind_rows(
 
 cat("\n--- Pixel-level Trend Breakdown by Zone ---\n")
 print(RPI.Pixel.Trend.Summary)
+```
+
+```{r}
+# SECTION 2 MAPS: Temporal Trend Visualisation of the above statistics
+```
+
+```{r}
+# Map 2.1: Sen's Slope across Tsavo West NP
+  # Shows WHERE productivity is trending up or down spatially
+
+Map.SenSlope <- tm_shape(RPI.Trend.Raster[["Sen.Slope"]]) +
+  tm_raster(
+    col.scale = tm_scale_continuous(
+      values   = "ggplot2.rdylgn",   # Red = decline, Green = increase
+      midpoint = 0
+    ),
+    col_alpha = 0.85,
+    col.legend = tm_legend(
+      title = "Sen's Slope\n(RPI change/yr)"
+    )
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill       = NA,
+    fill_alpha = 0,
+    col        = "white",
+    lwd        = 2,
+    id         = "NAME"
+  ) +
+  tm_title("Pixel-level RPI Trend (Sen's Slope) — Tsavo West NP (2000–2023)") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  ))
+
+Map.SenSlope
+```
+
+```{r}
+# Map 2.2: Trend Significance mask (p < 0.05 pixels only)
+  # Shows only pixels with a statistically detectable trend and whether it is positive or negative
+
+Map.SenSlope.Significant <- tm_shape(RPI.Trend.Significant) +
+  tm_raster(
+    col.scale = tm_scale_continuous(
+      values   = "ggplot2.rdylgn",
+      midpoint = 0
+    ),
+    col_alpha = 0.9,
+    col.legend = tm_legend(
+      title = "Sen's Slope\n(p < 0.05 only)"
+    )
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill       = NA,
+    fill_alpha = 0,
+    col        = "white",
+    lwd        = 2,
+    id         = "NAME"
+  ) +
+  tm_title("Statistically Significant RPI Trends (p < 0.05) — Tsavo West NP") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  ))
+
+Map.SenSlope.Significant
+```
+
+```{r}
+# Map 2.3: Trend Category map (3-class categorical)
+  # Significant Increase / Significant Decrease / No Trend
+    ## Most visually accessible for a dissertation figure
+
+# Build a categorical trend raster from the two-band trend raster
+RPI.Trend.Category <- classify(
+  RPI.Trend.Raster,
+  rcl = matrix(nrow = 0, ncol = 0),   # placeholder — we use app() below
+  others = NA
+)
+
+# Reclassify into 3 categories using app()
+RPI.Trend.Category <- app(
+  RPI.Trend.Raster,
+  fun = function(x) {
+    slope  <- x[1]
+    pval   <- x[2]
+    if (is.na(slope) | is.na(pval)) return(NA_real_)
+    if (pval < 0.05 & slope > 0)    return(1)   # Significant Increase
+    if (pval < 0.05 & slope < 0)    return(-1)  # Significant Decrease
+    return(0)                                    # No Significant Trend
+  }
+)
+names(RPI.Trend.Category) <- "Trend.Category"
+
+Map.TrendCategory <- tm_shape(RPI.Trend.Category) +
+  tm_raster(
+    col.scale = tm_scale_categorical(
+      values = c("-1" = "#d73027",    # Red   = Significant Decrease
+                  "0" = "#ffffbf",    # Cream = No Significant Trend
+                  "1" = "#1a9850"),   # Green = Significant Increase
+      labels = c("Significant Decrease",
+                 "No Significant Trend",
+                 "Significant Increase")
+    ),
+    col_alpha = 0.85,
+    col.legend = tm_legend(title = "RPI Trend\n(2000–2023)")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill       = NA,
+    fill_alpha = 0,
+    col        = "white",
+    lwd        = 2,
+    id         = "NAME"
+  ) +
+  tm_title("RPI Trend Classification — Tsavo West NP (2000–2023)") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c(
+    "Esri.WorldImagery",
+    "OpenStreetMap",
+    "Esri.WorldGrayCanvas",
+    "Esri.WorldTopoMap"
+  ))
+
+Map.TrendCategory
+```
+
+```{r}
+# Arrange all these three Section 2 maps above side by side
+
+tmap_arrange(Map.SenSlope, Map.SenSlope.Significant, Map.TrendCategory, ncol = 3)
 ```
 
 ```{r}
