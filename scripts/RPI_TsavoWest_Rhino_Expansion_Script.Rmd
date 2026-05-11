@@ -965,7 +965,6 @@ names(RPI) <- Hydro.Year.Labels
 ```
 
 ```{r}
-
 # Create "Tsavo West excl. Rhino Range" zone
 # This is the KEY comparison zone for the habitat gap analysis:
 # the broader park habitat that rhinos could potentially expand into
@@ -977,7 +976,6 @@ TsavoWest.Excl.RhinoRange <- st_difference(
 ```
 
 ```{r}
-
 # Reusable extraction function
 # Extracts all pixel values from the RPI stack for a given zone
 # Returns a long-format tibble (one row per pixel per year)
