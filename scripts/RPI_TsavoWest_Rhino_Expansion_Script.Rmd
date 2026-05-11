@@ -634,11 +634,26 @@ PMLv2.GPP.Map <- tm_shape(PMLv2.Kenya[["GPP"]]) +
     col.legend = tm_legend(title = "GPP (Gross Primary Productivity)")
   ) +
   tm_shape(TsavoWest) +
-  tm_polygons(fill = "transparent", col = "black", lwd = 2, id = "NAME") +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
   tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5, id = "Id") +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Gross Primary Productivity") +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap", "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = c("Esri.WorldImagery", 
+                             "OpenStreetMap", 
+                             "Esri.WorldGrayCanvas", 
+                             "Esri.WorldTopoMap"))
 
 # 2. Ec (Canopy Transpiration)
 PMLv2.EC.Map <- tm_shape(PMLv2.Kenya[["Ec"]]) +
@@ -648,16 +663,27 @@ PMLv2.EC.Map <- tm_shape(PMLv2.Kenya[["Ec"]]) +
     col.legend = tm_legend(title = "Ec (Canopy Transpiration)")
   ) +
   tm_shape(TsavoWest) +
-  tm_polygons(fill = "transparent", col = "black", lwd = 2) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
   tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Canopy Transpiration") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
     "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
-    )
+    "Esri.WorldTopoMap"))
 
 # 3. Es (Soil Evaporation)
 PMLv2.ES.Map <- tm_shape(PMLv2.Kenya[["Es"]]) +
@@ -667,16 +693,27 @@ PMLv2.ES.Map <- tm_shape(PMLv2.Kenya[["Es"]]) +
     col.legend = tm_legend(title = "Es (Soil Evaporation)")
   ) +
   tm_shape(TsavoWest) +
-  tm_polygons(fill = "transparent", col = "black", lwd = 2) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
   tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Soil Evaporation") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
     "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
-    )
+    "Esri.WorldTopoMap"))
 
 # 4. Ei (Interception)
 PMLv2.EI.Map <- tm_shape(PMLv2.Kenya[["Ei"]]) +
@@ -686,16 +723,27 @@ PMLv2.EI.Map <- tm_shape(PMLv2.Kenya[["Ei"]]) +
     col.legend = tm_legend(title = "Ei (Interception)")
   ) +
   tm_shape(TsavoWest) +
-  tm_polygons(fill = "transparent", col = "black", lwd = 2) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
   tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Interception") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
     "OpenStreetMap",
     "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
-    )
+    "Esri.WorldTopoMap"))
 
 # Arrange in a 2x2 panel
 tmap_arrange(PMLv2.GPP.Map, PMLv2.EC.Map, PMLv2.ES.Map, PMLv2.EI.Map, ncol = 2)
@@ -716,8 +764,22 @@ StudyPixelsKenya.IGBP.Map <- tm_shape(StudyPixelsKenya[["igbp"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "MODIS Land Cover")
   ) +
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("IGBP – Land Cover Classes") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
@@ -731,8 +793,22 @@ StudyPixelsKenya.Trees.Map <- tm_shape(StudyPixelsKenya[["trees"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.greens", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Tree Cover (%)")) + 
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Tree Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
@@ -746,8 +822,22 @@ StudyPixelsKenya.Shrub.Map <- tm_shape(StudyPixelsKenya[["shrubland"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.yl_gn", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Shrubland Cover (%)")) + 
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Shrubland Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
@@ -761,8 +851,22 @@ StudyPixelsKenya.Grass.Map <- tm_shape(StudyPixelsKenya[["grassland"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.yl_or_br", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Grassland Cover (%)")) + 
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Grassland Cover") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
@@ -776,8 +880,22 @@ StudyPixelsKenya.BareGround.Map <- tm_shape(StudyPixelsKenya[["bare"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.greys", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Bare Ground (%)")) + 
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Bare Ground") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
@@ -791,8 +909,22 @@ StudyPixelsKenya.Rangelands.Map <- tm_shape(StudyPixelsKenya[["allRangelands"]])
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.spectral", style = "pretty", n = 7,value.na = NA),
     col.legend = tm_legend(title = "All Rangelands (%)")) + 
-  tm_shape(TsavoWest) + tm_polygons(fill = "transparent", col = "black", lwd = 2) +
-  tm_shape(TsavoWest.Rhino.Range) + tm_polygons(fill = "orange", fill_alpha = 0.2, col = "darkred", lwd = 1.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("All Rangelands") +
   tm_view(basemap.server = c(
     "Esri.WorldImagery",
