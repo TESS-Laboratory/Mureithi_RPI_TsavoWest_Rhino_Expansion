@@ -1397,6 +1397,235 @@ Unified.Zone.Profile |>
 ```
 
 ```{r}
+# SECTION 2: Temporal Trend Analysis
+# Theil-Sen slopes across the 22-year RPI time series (2000–2023)
+# Answering: has the RPI gap between the Rhino Range and the
+# rest of Tsavo West been growing, shrinking, or stable?
+```
 
+```{r}
+# Step 1: Add 5-year rolling mean to the annual summary table
+# Uses slider::slide_dbl() — centred window, .before=2, .after=2
+# Smooths interannual rainfall-driven variability so the
+# underlying productivity trend is easier to interpret
 
+RPI.Zone.Annual.Summary <- RPI.Zone.Annual.Summary |>
+  group_by(ZONE) |>
+  arrange(Year.Start) |>
+  mutate(
+    Rolling.Mean.5yr = slide_dbl(
+      Mean.RPI,
+      mean,
+      .before   = 2,
+      .after    = 2,
+      .complete = FALSE   # retain edge years with partial windows
+    )
+  ) |>
+  ungroup()
+```
 
+```{r}
+# Quick check
+RPI.Zone.Annual.Summary |>
+  select(ZONE, Hydro.Year, Mean.RPI, Rolling.Mean.5yr) |>
+  print(n = 10)
+```
+
+```{r}
+# Step 2: Zone-level Theil-Sen slopes
+# Applied to each zone's 22-year annual mean RPI time series
+# trend::sens.slope() performs both:
+#   → Sen's slope (median of all pairwise slopes) = magnitude
+#   → Mann-Kendall test = statistical significance
+
+RPI.Zone.Trends <- RPI.Zone.Annual.Summary |>
+  group_by(ZONE) |>
+  arrange(Year.Start) |>
+  summarise(
+    Sen.Slope       = as.numeric(trend::sens.slope(Mean.RPI)$estimates),
+    P.Value         = trend::sens.slope(Mean.RPI)$p.value,
+    CI.Lower        = trend::sens.slope(Mean.RPI)$conf.int[1],
+    CI.Upper        = trend::sens.slope(Mean.RPI)$conf.int[2],
+    MK.Z.Statistic  = as.numeric(trend::sens.slope(Mean.RPI)$statistic),
+    N.Years         = n(),
+    .groups         = "drop"
+  ) |>
+  mutate(
+    Significance = case_when(
+      P.Value < 0.001 ~ "***",
+      P.Value < 0.01  ~ "**",
+      P.Value < 0.05  ~ "*",
+      P.Value < 0.10  ~ ".",
+      TRUE            ~ "ns"
+    ),
+    Trend.Direction = case_when(
+      P.Value < 0.05 & Sen.Slope > 0 ~ "Significant Increase",
+      P.Value < 0.05 & Sen.Slope < 0 ~ "Significant Decrease",
+      TRUE                           ~ "No Significant Trend"
+    ),
+    # Express slope as RPI change per decade for interpretability
+    Sen.Slope.Per.Decade = Sen.Slope * 10
+  )
+
+print(RPI.Zone.Trends)
+```
+
+```{r}
+# Step 3: Pixel-level Theil-Sen slope raster
+# Applied to each pixel's 22-year RPI time series independently
+# Produces a 2-band raster:
+#   Band 1 → Sen's slope (trend magnitude per year)
+#   Band 2 → Mann-Kendall p-value (statistical significance)
+
+# Helper function — applied to each pixel's time series vector
+compute_pixel_sens_slope <- function(x) {
+  # Require at least 8 non-NA years for a reliable trend estimate
+  if (sum(!is.na(x)) < 8) return(c(Sen.Slope = NA_real_, P.Value = NA_real_))
+  result <- trend::sens.slope(x[!is.na(x)])
+  c(
+    Sen.Slope = as.numeric(result$estimates),
+    P.Value   = as.numeric(result$p.value)
+  )
+}
+
+cat("Computing pixel-level Theil-Sen slopes across Tsavo West NP...\n")
+cat("(This may take a few minutes given raster extent)\n")
+
+RPI.Trend.Raster <- app(
+  TsavoWest.RPI.Crop,
+  fun   = compute_pixel_sens_slope,
+  cores = 2   # adjust to your machine; use parallel::detectCores() - 1 for max
+)
+
+names(RPI.Trend.Raster) <- c("Sen.Slope", "P.Value")
+
+# Create a significance mask — pixels with p < 0.05 only
+RPI.Trend.Significant <- RPI.Trend.Raster[["Sen.Slope"]]
+RPI.Trend.Significant[RPI.Trend.Raster[["P.Value"]] >= 0.05] <- NA
+
+# Quick summary of trend raster
+cat("\nPixel-level trend summary (all pixels):\n")
+global(RPI.Trend.Raster, "mean", na.rm = TRUE)
+
+cat("\nPixel-level trend summary (significant pixels only, p < 0.05):\n")
+global(RPI.Trend.Significant, "mean", na.rm = TRUE)
+```
+
+```{r}
+# Step 4: RPI gap trajectory analysis
+# The core expansion feasibility question:
+# Is the productivity advantage of the Rhino Range over the
+# rest of Tsavo West growing, shrinking, or stable over time?
+
+RPI.Gap.Annual <- RPI.Zone.Annual.Summary |>
+  filter(ZONE %in% c(
+    "Rhino Range (Ngulia + IPZ)",
+    "Tsavo West (excl. Rhino Range)"
+  )) |>
+  select(ZONE, Hydro.Year, Year.Start, Mean.RPI, Rolling.Mean.5yr) |>
+  pivot_wider(
+    names_from  = ZONE,
+    values_from = c(Mean.RPI, Rolling.Mean.5yr)
+  ) |>
+  rename(
+    RhinoRange.Mean.RPI     = `Mean.RPI_Rhino Range (Ngulia + IPZ)`,
+    TW.Excl.Mean.RPI        = `Mean.RPI_Tsavo West (excl. Rhino Range)`,
+    RhinoRange.Rolling.5yr  = `Rolling.Mean.5yr_Rhino Range (Ngulia + IPZ)`,
+    TW.Excl.Rolling.5yr     = `Rolling.Mean.5yr_Tsavo West (excl. Rhino Range)`
+  ) |>
+  mutate(
+    RPI.Gap         = RhinoRange.Mean.RPI    - TW.Excl.Mean.RPI,
+    RPI.Gap.Rolling = RhinoRange.Rolling.5yr - TW.Excl.Rolling.5yr
+  ) |>
+  arrange(Year.Start)
+
+# Theil-Sen trend on the gap itself
+Gap.Trend.Result <- trend::sens.slope(RPI.Gap.Annual$RPI.Gap)
+
+RPI.Gap.Trend.Summary <- tibble(
+  Metric              = "RPI Gap (Rhino Range minus TW excl.)",
+  Sen.Slope           = as.numeric(Gap.Trend.Result$estimates),
+  Sen.Slope.Per.Decade = as.numeric(Gap.Trend.Result$estimates) * 10,
+  P.Value             = Gap.Trend.Result$p.value,
+  CI.Lower            = Gap.Trend.Result$conf.int[1],
+  CI.Upper            = Gap.Trend.Result$conf.int[2],
+  MK.Z.Statistic      = as.numeric(Gap.Trend.Result$statistic),
+  Significance        = case_when(
+    Gap.Trend.Result$p.value < 0.001 ~ "***",
+    Gap.Trend.Result$p.value < 0.01  ~ "**",
+    Gap.Trend.Result$p.value < 0.05  ~ "*",
+    Gap.Trend.Result$p.value < 0.10  ~ ".",
+    TRUE                             ~ "ns"
+  ),
+  Interpretation      = case_when(
+    Gap.Trend.Result$p.value < 0.05 & Gap.Trend.Result$estimates > 0 ~
+      "Gap is widening — Rhino Range gaining productivity advantage",
+    Gap.Trend.Result$p.value < 0.05 & Gap.Trend.Result$estimates < 0 ~
+      "Gap is narrowing — Expansion zone converging with Rhino Range",
+    TRUE ~
+      "Gap is stable — no significant change over 2000-2023"
+  )
+)
+
+cat("\n--- RPI Gap Trend Summary ---\n")
+print(RPI.Gap.Trend.Summary)
+
+cat("\n--- Annual RPI Gap Values ---\n")
+print(RPI.Gap.Annual |> select(Hydro.Year, RPI.Gap, RPI.Gap.Rolling))
+```
+
+```{r}
+# Step 5: Pixel-level trend breakdown by zone
+# Summarise what % of pixels in each zone show
+# significant positive, significant negative, or no trend
+
+# Extract Sen.Slope and P.Value per pixel per zone
+extract_trend_pixels <- function(trend_raster, boundary_sf, zone_name) {
+  terra::extract(trend_raster, vect(boundary_sf), xy = TRUE) |>
+    as_tibble() |>
+    filter(!is.na(Sen.Slope), !is.na(P.Value)) |>
+    mutate(
+      ZONE = zone_name,
+      Trend.Category = case_when(
+        P.Value < 0.05 & Sen.Slope > 0 ~ "Significant Increase",
+        P.Value < 0.05 & Sen.Slope < 0 ~ "Significant Decrease",
+        TRUE                           ~ "No Significant Trend"
+      )
+    )
+}
+
+Trend.Pixels.TsavoWest  <- extract_trend_pixels(RPI.Trend.Raster, TsavoWest,                "Tsavo West NP")
+Trend.Pixels.Ngulia     <- extract_trend_pixels(RPI.Trend.Raster, NguliaSanctuary,           "Ngulia Sanctuary")
+Trend.Pixels.IPZ        <- extract_trend_pixels(RPI.Trend.Raster, TsavoWestIPZ,              "Intensive Protection Zone")
+Trend.Pixels.RhinoRange <- extract_trend_pixels(RPI.Trend.Raster, TsavoWest.Rhino.Range,     "Rhino Range (Ngulia + IPZ)")
+Trend.Pixels.TW.Excl    <- extract_trend_pixels(RPI.Trend.Raster, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)")
+
+# Combine and summarise
+RPI.Pixel.Trend.Summary <- bind_rows(
+  Trend.Pixels.TsavoWest,
+  Trend.Pixels.Ngulia,
+  Trend.Pixels.IPZ,
+  Trend.Pixels.RhinoRange,
+  Trend.Pixels.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(
+      ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    )
+  ) |>
+  group_by(ZONE, Trend.Category) |>
+  summarise(N.Pixels = n(), .groups = "drop") |>
+  group_by(ZONE) |>
+  mutate(Pct.Pixels = N.Pixels / sum(N.Pixels) * 100) |>
+  ungroup()
+
+cat("\n--- Pixel-level Trend Breakdown by Zone ---\n")
+print(RPI.Pixel.Trend.Summary)
+```
+
+```{r}
