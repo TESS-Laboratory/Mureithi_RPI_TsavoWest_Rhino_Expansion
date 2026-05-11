@@ -1824,6 +1824,13 @@ Map.TrendCategory
 ```
 
 ```{r}
+# Switching to Interactive mode for the above plot
+
+tmap_mode("view")
+Map.TrendCategory
+```
+
+```{r}
 # Arrange all these three Section 2 maps above side by side
 
 tmap_arrange(Map.SenSlope, Map.SenSlope.Significant, Map.TrendCategory, ncol = 3)
