@@ -524,7 +524,7 @@ tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
 ```
 
 ```{r}
-# Temporal Performance Overview
+# Preliminary Section: Temporal Performance Overview
 ```
 
 ```{r}
@@ -992,7 +992,7 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
 ```
 
 ```{r}
-# SECTION: Zone-Level RPI Summaries
+# SECTION 1: Zone-Level RPI Summaries
 # Extracting pixel values per zone into data frames
 # for statistical comparison
 ```
@@ -1758,39 +1758,49 @@ Map.SenSlope.Significant
   # Significant Increase / Significant Decrease / No Trend
     ## Most visually accessible for a dissertation figure
 
-# Build a categorical trend raster from the two-band trend raster
-RPI.Trend.Category <- classify(
-  RPI.Trend.Raster,
-  rcl = matrix(nrow = 0, ncol = 0),   # placeholder — we use app() below
-  others = NA
-)
+# Vectorized classification — safe and memory-efficient
+RPI.Trend.Category <- RPI.Trend.Raster[["Sen.Slope"]]  # Copy structure of Sen.Slope band
+values(RPI.Trend.Category) <- 0L                        # Integer 0 = No Significant Trend
 
-# Reclassify into 3 categories using app()
-RPI.Trend.Category <- app(
-  RPI.Trend.Raster,
-  fun = function(x) {
-    slope  <- x[1]
-    pval   <- x[2]
-    if (is.na(slope) | is.na(pval)) return(NA_real_)
-    if (pval < 0.05 & slope > 0)    return(1)   # Significant Increase
-    if (pval < 0.05 & slope < 0)    return(-1)  # Significant Decrease
-    return(0)                                    # No Significant Trend
-  }
-)
+# Assign categories using vectorized logical indexing
+RPI.Trend.Category[
+  RPI.Trend.Raster[["P.Value"]] < 0.05 & 
+  RPI.Trend.Raster[["Sen.Slope"]] > 0
+] <- 1L    # Significant Increase
+
+RPI.Trend.Category[
+  RPI.Trend.Raster[["P.Value"]] < 0.05 & 
+  RPI.Trend.Raster[["Sen.Slope"]] < 0
+] <- -1L   # Significant Decrease
+
+# Preserve original NAs
+RPI.Trend.Category[is.na(RPI.Trend.Raster[["Sen.Slope"]])] <- NA
+
+# Name the layer
 names(RPI.Trend.Category) <- "Trend.Category"
+
+# Free RAM before plotting
+gc()
+
+# Static plotting to avoid risk of R crashing
+tmap_mode("plot")
 
 Map.TrendCategory <- tm_shape(RPI.Trend.Category) +
   tm_raster(
     col.scale = tm_scale_categorical(
-      values = c("-1" = "#d73027",    # Red   = Significant Decrease
-                  "0" = "#ffffbf",    # Cream = No Significant Trend
-                  "1" = "#1a9850"),   # Green = Significant Increase
-      labels = c("Significant Decrease",
-                 "No Significant Trend",
-                 "Significant Increase")
+      values = c(
+        "-1" = "#d73027",   # Red   — Significant Decrease
+         "0" = "#ffffbf",   # Cream — No Significant Trend
+         "1" = "#1a9850"    # Green — Significant Increase
+      ),
+      labels = c(
+        "Significant Decrease",
+        "No Significant Trend",
+        "Significant Increase"
+      )
     ),
-    col_alpha = 0.85,
-    col.legend = tm_legend(title = "RPI Trend\n(2000–2023)")
+    col_alpha   = 0.85,
+    col.legend  = tm_legend(title = "RPI Trend\n(2000–2023)")
   ) +
   tm_shape(TsavoWest) +
   tm_borders(col = "black", lwd = 2) +
@@ -1803,15 +1813,14 @@ Map.TrendCategory <- tm_shape(RPI.Trend.Category) +
     id         = "NAME"
   ) +
   tm_title("RPI Trend Classification — Tsavo West NP (2000–2023)") +
-  tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  ))
+  tm_layout(legend.outside = TRUE)
 
 Map.TrendCategory
+
+# Switch to interactive AFTER static confirms it works
+
+# tmap_mode("view")
+# Map.TrendCategory
 ```
 
 ```{r}
