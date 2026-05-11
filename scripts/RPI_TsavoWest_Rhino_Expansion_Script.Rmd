@@ -429,7 +429,7 @@ tm_shape(TsavoWest.RPI.Mean) +
 NguliaSanctuary.RPI.Mask <- mask(RPI, NguliaSanctuary)
 NguliaSanctuary.RPI.Crop <- crop(NguliaSanctuary.RPI.Mask, NguliaSanctuary)
 
-# Averaging across years for visualization
+# Averaging across years for visualisation
 NguliaSanctuary.RPI.Mean <- mean(NguliaSanctuary.RPI.Crop, na.rm = TRUE)
 
 # Visualise
@@ -462,7 +462,7 @@ tm_shape(NguliaSanctuary.RPI.Mean) +
 TsavoWestIPZ.RPI.Mask <- mask(RPI, TsavoWestIPZ)
 TsavoWestIPZ.RPI.Crop <- crop(TsavoWestIPZ.RPI.Mask, TsavoWestIPZ)
 
-# Averaging across years for visualization
+# Averaging across years for visualisation
 TsavoWestIPZ.RPI.Mean <- mean(TsavoWestIPZ.RPI.Crop, na.rm = TRUE)
 
 # Visualise
@@ -555,6 +555,22 @@ Map.MAE <- tm_shape(Temporal.Performance.Kenya[["mae"]]) +
 ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Mean Absolute Error") +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c(
@@ -573,6 +589,22 @@ Map.RMSE <- tm_shape(Temporal.Performance.Kenya[["rmse"]]) +
   ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title("Root Mean Squared Error") +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c(
@@ -591,6 +623,22 @@ Map.Rsqd <- tm_shape(Temporal.Performance.Kenya[["rsq"]]) +
   ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
+  tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = "white",      # Using a dummy color with 0 alpha for transparency
+    fill_alpha = 0, 
+    col = "black", 
+    lwd = 2, 
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange", 
+    fill_alpha = 0.2, 
+    col = "darkred", 
+    lwd = 1.5, 
+    id = "NAME"
+  ) +
   tm_title(expression(R^2)) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c(
