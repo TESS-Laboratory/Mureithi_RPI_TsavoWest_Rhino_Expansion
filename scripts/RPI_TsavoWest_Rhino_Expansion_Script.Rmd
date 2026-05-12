@@ -992,6 +992,148 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
 ```
 
 ```{r}
+# General Reference and Administrative Maps Save before moving to Zone-level RPI summaries
+
+library(tmap)
+
+# Set mode to plot for high-quality static export
+tmap_mode("plot")
+
+# 1. Kenya Terrestrial Protected Areas
+Kenya.ProtectedAreas.Map <- tm_shape(Kenya.Admin.Boundary) +
+  tm_polygons(
+    fill = "lightgrey",
+    col = "black",
+    lwd = 1,
+    fill_alpha = 0.3,
+    id = "ADM0_EN"
+  ) +
+  tm_shape(Kenya.Terrestrial.PAs) +
+  tm_polygons(
+    fill = "darkgreen",
+    col = "black",
+    lwd = 1,
+    fill_alpha = 0.3,
+    id = "NAME"
+  ) +
+  tm_title("Kenya Terrestrial Protected Areas")
+
+tmap_save(Kenya.ProtectedAreas.Map, 
+          "Kenya_Terrestrial_Protected_Areas.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 11.69)
+
+# 2. Tsavo West Rhino Range Overview
+TsavoWest.Rhino.Range.Map <- tm_shape(TsavoWest) +
+  tm_polygons(
+    fill = NA,          
+    col = "black",
+    lwd = 3, 
+    fill_alpha = 0,
+    id = "NAME"
+  ) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill = "orange",
+    col = "black",
+    lwd = 2,
+    fill_alpha = 0.2,
+    id = "Id"
+  ) +
+  tm_title("Tsavo West Rhino Range (Ngulia Sanctuary + IPZ) within Tsavo West NP")
+
+tmap_save(TsavoWest.Rhino.Range.Map, 
+          "Tsavo_West_Rhino_Range_Overview.png", 
+          dpi = 600, 
+          width = 11.69, 
+          height = 8.27)
+
+# 3. Ngulia Sanctuary - RPI
+NguliaSanctuary.RPI.Map <- tm_shape(NguliaSanctuary.RPI.Mean) +
+  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
+            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
+  tm_shape(NguliaSanctuary) +
+  tm_borders(col = "white", lwd = 2) +
+  tm_title("Spatial Distribution of Mean RPI in Ngulia Sanctuary") +
+  tm_layout(legend.outside = TRUE)
+
+tmap_save(NguliaSanctuary.RPI.Map, 
+          "Ngulia_Sanctuary_Mean_RPI.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 8.27)
+
+# 4. Tsavo West IPZ - RPI
+TsavoWest.IPZ.RPI.Map <- tm_shape(TsavoWestIPZ.RPI.Mean) +
+  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
+            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
+  tm_shape(TsavoWestIPZ) +
+  tm_borders(col = "white", lwd = 2) +
+  tm_title("Spatial Distribution of Mean RPI in Tsavo West's Intensive Protection Zone") +
+  tm_layout(legend.outside = TRUE)
+
+tmap_save(TsavoWest.IPZ.RPI.Map, 
+          "Tsavo_West_IPZ_Mean_RPI.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 8.27)
+
+# 5. Tsavo West Rhino Range - RPI
+TsavoWest.Rhino.Range.RPI.Map <- tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
+  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
+            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "white", lwd = 2) +
+  tm_title("Spatial Distribution of Mean RPI in Tsavo West Rhino Range") +
+  tm_layout(legend.outside = TRUE)
+
+tmap_save(TsavoWest.Rhino.Range.RPI.Map, 
+          "Tsavo_West_Rhino_Range_Mean_RPI.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 8.27)
+
+# 6. Temporal Performance Metrics (3-Panel)
+Temporal.Performance.Map <- tmap_arrange(Map.MAE, 
+                                         Map.RMSE, 
+                                         Map.Rsqd, 
+                                         ncol = 3)
+tmap_save(Temporal.Performance.Map, 
+          "Kenya_Temporal_Performance_Metrics.png", 
+          dpi = 600, 
+          width = 11.69, 
+          height = 8.27)
+
+# 7. PMLv2 Productivity & Energy Fluxes (4-Panel)
+PMLv2.Panel.Map <- tmap_arrange(PMLv2.GPP.Map, 
+                                PMLv2.EC.Map, 
+                                PMLv2.ES.Map, 
+                                PMLv2.EI.Map, 
+                                ncol = 2)
+tmap_save(PMLv2.Panel.Map, 
+          "PMLv2_Kenya_Fluxes_Panel.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 11.69)
+
+# 8. Study Pixels Land Cover Classes (6-Panel)
+LandCover.Panel.Map <- tmap_arrange(StudyPixelsKenya.IGBP.Map, 
+                                    StudyPixelsKenya.Trees.Map,
+                                    StudyPixelsKenya.Shrub.Map,
+                                    StudyPixelsKenya.Grass.Map,
+                                    StudyPixelsKenya.BareGround.Map,
+                                    StudyPixelsKenya.Rangelands.Map,
+                                    ncol = 2)
+
+tmap_save(LandCover.Panel.Map, 
+          "Kenya_Land_Cover_Vegetation_Panel.png", 
+          dpi = 600, 
+          width = 8.27, 
+          height = 11.69)
+```
+
+```{r}
 # SECTION 1: Zone-Level RPI Summaries
 # Extracting pixel values per zone into data frames
 # for statistical comparison
@@ -2227,6 +2369,27 @@ Fig3.4.RPI.Spatial.Gap.Map <- tm_shape(TsavoWest.RPI.Mean) +
   ))
 
 Fig3.4.RPI.Spatial.Gap.Map
+```
+
+```{r}
+# Saving
+
+#ggsave(
+#  "Mean_RPI_Ridgeline_Plot.png",
+#  RPI.Ridgeline.Simulation.Plot,
+#  width = 8.27,
+#  height = 11.69,
+#  dpi = 600
+#)
+
+
+#tmap_save(
+#  Africa.Map,
+#  "Africa_Map.png",
+#  dpi = 600,
+#  width = 8.27,
+#  height = 11.69
+#)
 ```
 
 ```{r}
