@@ -3622,13 +3622,19 @@ Map.Hydro.Combined <- tm_shape(TsavoWest.TWI) +
 ```
 
 ```{r}
-# Render maps individually first
+# Run maps individually first — static mode to avoid memory issues
+tmap_mode("plot")
+
 Map.Elevation
 Map.Slope
 Map.TRI
 Map.TWI
 Map.DistToWater
 Map.Hydro.Combined
+
+# Then switch to view mode for interactive exploration
+tmap_mode("view")
+Map.DistToWater   # most important map for expansion argument
 ```
 
 ```{r}
