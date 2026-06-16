@@ -3284,9 +3284,10 @@ cat("\nFinal distance to water range (km):",
 
 ```{r}
 # Step 8: Extract terrain + hydrology per zone
-  # Extend the existing Pixel.CrossAnalysis table with Elevation, Slope, TRI, TWI, Distance to Water
+  # Uses point-sampling at RPI centroid locations (same approach as Section 4A) to ensure coordinate alignment across all raster sources
 
-# Rebuild terrain stack with corrected DistToWater
+# Step 8a: Build terrain + hydrology raster stack
+
 Terrain.Hydro.Stack <- c(
   TsavoWest.Elevation,
   TsavoWest.Slope,
@@ -3297,107 +3298,96 @@ Terrain.Hydro.Stack <- c(
 names(Terrain.Hydro.Stack) <- c(
   "Elevation_m", "Slope_deg", "TRI", "TWI", "Dist_to_Water_km"
 )
+```
 
-# Re-extract per zone
-cat("Extracting terrain + hydrology — Tsavo West NP...\n")
-Terrain.Pixels.TsavoWest  <- extract_multiband_pixels(
-  Terrain.Hydro.Stack, TsavoWest, "Tsavo West NP")
+```{r}
+# Step 8b: Remove ALL previous terrain columns from Pixel.CrossAnalysis — including .x and .y suffixed versions
+  # matches() catches all variants in one call
 
-cat("Extracting terrain + hydrology — Ngulia Sanctuary...\n")
-Terrain.Pixels.Ngulia     <- extract_multiband_pixels(
-  Terrain.Hydro.Stack, NguliaSanctuary, "Ngulia Sanctuary")
-
-cat("Extracting terrain + hydrology — Intensive Protection Zone...\n")
-Terrain.Pixels.IPZ        <- extract_multiband_pixels(
-  Terrain.Hydro.Stack, TsavoWestIPZ, "Intensive Protection Zone")
-
-cat("Extracting terrain + hydrology — Rhino Range (combined)...\n")
-Terrain.Pixels.RhinoRange <- extract_multiband_pixels(
-  Terrain.Hydro.Stack, TsavoWest.Rhino.Range, "Rhino Range (Ngulia + IPZ)")
-
-cat("Extracting terrain + hydrology — Tsavo West excl. Rhino Range...\n")
-Terrain.Pixels.TW.Excl    <- extract_multiband_pixels(
-  Terrain.Hydro.Stack, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)")
-
-# Combine with values_fn = mean — resolves duplicate boundary pixels
-Terrain.Pixel.Wide <- bind_rows(
-  Terrain.Pixels.TsavoWest,
-  Terrain.Pixels.Ngulia,
-  Terrain.Pixels.IPZ,
-  Terrain.Pixels.RhinoRange,
-  Terrain.Pixels.TW.Excl
-) |>
-  mutate(
-    ZONE = fct_relevel(ZONE,
-      "Tsavo West NP",
-      "Tsavo West (excl. Rhino Range)",
-      "Rhino Range (Ngulia + IPZ)",
-      "Ngulia Sanctuary",
-      "Intensive Protection Zone"
-    )
-  ) |>
-  pivot_wider(
-    id_cols     = c(ZONE, x, y),
-    names_from  = Band,
-    values_from = Value,
-    values_fn   = mean        # resolves duplicate boundary pixels
-  ) |>
-  mutate(x = round(x, 6), y = round(y, 6))
-
-# Confirm all columns are numeric
-cat("Terrain column classes:\n")
-sapply(Terrain.Pixel.Wide |> select(-ZONE, -x, -y), class)
-
-
-# Rebuild Pixel.CrossAnalysis from scratch to avoid column duplication
-  # First check how many columns Pixel.CrossAnalysis currently has
-cat("\nCurrent Pixel.CrossAnalysis columns:", ncol(Pixel.CrossAnalysis), "\n")
-cat("Column names:\n")
-print(names(Pixel.CrossAnalysis))
-
-# Remove any previously joined terrain columns if they exist
 Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
-  select(-any_of(c(
-    "Elevation_m", "Slope_deg", "TRI", "TWI", "Dist_to_Water_km"
-  )))
+  select(-matches("Elevation_m|Slope_deg|TRI|TWI|Dist_to_Water"))
 
-cat("\nPixel.CrossAnalysis after removing old terrain columns:",
-    ncol(Pixel.CrossAnalysis), "columns\n")
+cat("Columns after terrain cleanup:", ncol(Pixel.CrossAnalysis), "\n")
+print(names(Pixel.CrossAnalysis))
+```
 
-# Now join the clean terrain wide table
+```{r}
+# Step 8c: Point-sample terrain stack at RPI centroid locations
+  # RPI.Centroids.Vect was built in Section 4A Step 1
+    # This guarantees coordinate alignment — no join mismatch
+
+cat("\nSampling terrain + hydrology at RPI pixel locations...\n")
+
+Terrain.Sampled <- terra::extract(
+  Terrain.Hydro.Stack,
+  RPI.Centroids.Vect
+) |>
+  as_tibble() |>
+  mutate(
+    x = round(RPI.Centroids$x, 6),
+    y = round(RPI.Centroids$y, 6)
+  ) |>
+  select(-ID)
+
+cat("Terrain sampled — dimensions:", dim(Terrain.Sampled), "\n")
+
+# Quick range checks — confirm values are ecologically plausible
+cat("Elevation range (m):      ",
+    round(range(Terrain.Sampled$Elevation_m,     na.rm = TRUE), 0), "\n")
+cat("Slope range (degrees):    ",
+    round(range(Terrain.Sampled$Slope_deg,        na.rm = TRUE), 1), "\n")
+cat("TRI range:                ",
+    round(range(Terrain.Sampled$TRI,              na.rm = TRUE), 2), "\n")
+cat("TWI range:                ",
+    round(range(Terrain.Sampled$TWI,              na.rm = TRUE), 2), "\n")
+cat("Dist to water range (km): ",
+    round(range(Terrain.Sampled$Dist_to_Water_km, na.rm = TRUE), 2), "\n")
+```
+
+```{r}
+# Step 8d: Join terrain to master cross-analysis table
+  # x, y already aligned — both from RPI centroid grid
+
 Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
   mutate(x = round(x, 6), y = round(y, 6)) |>
-  left_join(Terrain.Pixel.Wide, by = c("ZONE", "x", "y"))
+  left_join(Terrain.Sampled, by = c("x", "y"))
 
-cat("Final Pixel.CrossAnalysis dimensions:", dim(Pixel.CrossAnalysis), "\n")
+cat("\nFinal Pixel.CrossAnalysis dimensions:", dim(Pixel.CrossAnalysis), "\n")
+```
 
-# Quick sanity check on terrain values
+```{r}
+# Step 8e: Verification — all terrain values must be numeric, no NaN, no -Inf
+
 Pixel.CrossAnalysis |>
   group_by(ZONE) |>
   summarise(
-    N.Pixels         = n(),
-    Mean.Elevation   = round(mean(Elevation_m,       na.rm = TRUE), 1),
-    Mean.Slope       = round(mean(Slope_deg,          na.rm = TRUE), 2),
-    Mean.Dist.Water  = round(mean(Dist_to_Water_km,   na.rm = TRUE), 2),
-    Max.Dist.Water   = round(max(Dist_to_Water_km,    na.rm = TRUE), 2),
-    .groups          = "drop"
+    N.Pixels        = n(),
+    Mean.Elevation  = round(mean(Elevation_m,          na.rm = TRUE), 1),
+    Mean.Slope      = round(mean(Slope_deg,             na.rm = TRUE), 2),
+    Mean.Dist.Water = round(mean(Dist_to_Water_km,      na.rm = TRUE), 2),
+    Max.Dist.Water  = round(max(Dist_to_Water_km,       na.rm = TRUE), 2),
+    Pct.Within.2km  = round(mean(Dist_to_Water_km < 2,  na.rm = TRUE) * 100, 1),
+    Pct.Within.5km  = round(mean(Dist_to_Water_km < 5,  na.rm = TRUE) * 100, 1),
+    .groups         = "drop"
   ) |>
   print()
+```
 
+```{r}
+# Step 8f: Zone-level terrain + hydrology summary table
 
-# Zone-level terrain + hydrology summary
-
-Terrain.Zone.Summary <- Terrain.Pixel.Wide |>
+Terrain.Zone.Summary <- Pixel.CrossAnalysis |>
+  filter(!is.na(Elevation_m)) |>
   group_by(ZONE) |>
   summarise(
-    Mean.Elevation    = mean(Elevation_m,                  na.rm = TRUE),
-    Mean.Slope        = mean(Slope_deg,                    na.rm = TRUE),
-    Mean.TRI          = mean(TRI,                          na.rm = TRUE),
-    Mean.TWI          = mean(TWI,                          na.rm = TRUE),
-    Mean.Dist.Water   = mean(Dist_to_Water_km,             na.rm = TRUE),
-    Median.Dist.Water = median(Dist_to_Water_km,           na.rm = TRUE),
-    Pct.Within.2km    = mean(Dist_to_Water_km < 2,         na.rm = TRUE) * 100,
-    Pct.Within.5km    = mean(Dist_to_Water_km < 5,         na.rm = TRUE) * 100,
+    Mean.Elevation    = mean(Elevation_m,               na.rm = TRUE),
+    Mean.Slope        = mean(Slope_deg,                 na.rm = TRUE),
+    Mean.TRI          = mean(TRI,                       na.rm = TRUE),
+    Mean.TWI          = mean(TWI,                       na.rm = TRUE),
+    Mean.Dist.Water   = mean(Dist_to_Water_km,          na.rm = TRUE),
+    Median.Dist.Water = median(Dist_to_Water_km,        na.rm = TRUE),
+    Pct.Within.2km    = mean(Dist_to_Water_km < 2,      na.rm = TRUE) * 100,
+    Pct.Within.5km    = mean(Dist_to_Water_km < 5,      na.rm = TRUE) * 100,
     .groups           = "drop"
   )
 
@@ -3406,9 +3396,56 @@ print(Terrain.Zone.Summary)
 ```
 
 ```{r}
-# SECTION 4B MAPS
+# Step 8g: Rebuild subsampled plotting object 
+  # Must be rebuilt here so it includes the terrain columns
 
-tmap_mode("view")
+set.seed(42)
+Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  slice_sample(n = 3000) |>
+  ungroup()
+
+cat("\nUpdated sample dimensions:", dim(Pixel.CrossAnalysis.Sample), "\n")
+```
+
+```{r}
+# Terrain & Hydrology Zone Summary — Interpretation
+
+# Elevation
+## All zones sit at remarkably similar mean elevations (796–806m), with one notable exception — Ngulia Sanctuary at 682m. This is ecologically correct and important: Ngulia is not perched on top of the Ngulia Hills — it is a valley basin enclosed by the escarpment. The hills form the walls, the sanctuary is the bowl. This explains why Ngulia has the highest shrubland cover and RPI despite lower elevation — it sits in a sheltered, moisture-retaining topographic position.
+## This is a significant finding for expansion feasibility. The potential expansion zone (Tsavo West excl. Rhino Range) is the flattest and least rugged terrain in the park — meaning it poses the lowest movement cost for rhinos. This is actually a positive finding for expansion — terrain is not a barrier. However it also means the expansion zone lacks the topographic complexity that provides security cover in the current Rhino Range.
+
+# Topographic Wetness Index (TWI)
+## Tsavo West excl. Rhino Range has the highest TWI (5.29) compared to the Rhino Range (4.89). Higher TWI indicates greater soil moisture accumulation potential — meaning the expansion zone has more moisture-retaining terrain despite lower RPI. This reinforces the land cover explanation: the expansion zone has moisture potential but it is expressed as grassland rather than shrubland, hence lower productivity.
+
+# Distance to Water — The Critical Constraint
+## The water access gradient is subtle but consistent — Ngulia has the best water access, the expansion zone has the worst. The difference is not dramatic (~1km mean difference) but the maximum distance of 11.5km in the expansion zone means some areas are genuinely water-limited for rhinos needing access every 2–4 days.
+```
+
+```{r}
+# # Distance to Water — The Critical Constraint {TO CHECK REASON WHY ABOVE}
+
+Terrain.Zone.Summary |>
+  select(ZONE, Pct.Within.2km, Pct.Within.5km) |>
+  print()
+```
+
+```{r}
+# Water Access — Complete Interpretation
+## The headline finding: water access is NOT a major differentiating constraint between the Rhino Range and the expansion zone.
+
+## The difference between the Rhino Range (41.7% within 2km) and Tsavo West excl. Rhino Range (40.1% within 2km) is only 1.6 percentage points — effectively negligible. At the 5km threshold the gap is slightly larger (4.4 points) but still modest.
+
+## This is an important finding for the expansion feasibility argument because it means terrain and water access do not constitute structural barriers to expansion — the limiting factor is overwhelmingly land cover composition and habitat productivity, not physical accessibility.
+
+## Ngulia has 16 percentage points more pixels within daily rhino water access range than any other zone. Combined with its valley basin topography, highest shrubland cover (86%), and highest GPP (125 gC/m²/yr), this explains why Ngulia maintains the highest RPI of all zones — it is the single most habitat-optimal sub-zone in the entire park across every metric simultaneously.
+
+# The 20% water-limited fraction in the expansion zone:
+## Approximately 20.8% of Tsavo West excl. Rhino Range pixels lie beyond 5km from water. This is the only genuine water-access concern for expansion — not as a zone-wide barrier, but as a spatial constraint that would limit where within the expansion zone rhinos could establish permanent home ranges. This maps directly onto  spatial figures — areas beyond 5km from water in the expansion zone would need either artificial water provision or should be deprioritised in any expansion planning.
+```
+
+```{r}
+# SECTION 4B MAPS
 ```
 
 ```{r}
