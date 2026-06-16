@@ -3184,33 +3184,48 @@ names(TsavoWest.SCA) <- "SCA"
     # Threshold of 500 pixels = ~289 ha contributing area
       # Captures meaningful seasonal drainage lines (luggas) relevant to rhino water access
 
-# Reload SCA in its native CRS (before reprojection)
-TsavoWest.SCA.Native <- rast(SCA.Path)
+# N/B!
+# Root cause: non-stream pixels which are NA — block gridDist paths
+# Fix: non-stream pixels within park = 0, stream = 1, outside = NA
 
-# Check what CRS the WBT output is in
+# Reload SCA in native WBT CRS (no mask applied yet)
+SCA.Native <- rast(SCA.Path)
+
 cat("Native SCA CRS:\n")
-print(crs(TsavoWest.SCA.Native, describe = TRUE))
+print(crs(SCA.Native, describe = TRUE))
 
-# Mask to Tsavo West — reproject the vector to match native CRS
-TsavoWest.Native.CRS  <- st_transform(TsavoWest, crs(TsavoWest.SCA.Native))
+# Reproject park boundary to match native SCA CRS
+TsavoWest.Native.CRS  <- st_transform(TsavoWest, crs(SCA.Native))
 TsavoWest.Native.Vect <- vect(TsavoWest.Native.CRS)
 
-TsavoWest.SCA.Native <- mask(TsavoWest.SCA.Native, TsavoWest.Native.Vect)
+# Mask SCA to park — pixels outside park become NA
+SCA.Masked <- mask(SCA.Native, TsavoWest.Native.Vect)
 
-# Check SCA value range before thresholding
-cat("SCA value range (native):\n")
-print(minmax(TsavoWest.SCA.Native))
+# Create PROPER binary raster using ifel():
+#   1  = stream pixel (SCA above threshold)
+#   0  = non-stream pixel within park  ← KEY FIX (was NA before)
+#   NA = outside park boundary         ← only NAs are outside park
 
-# Extract streams using native CRS
-Stream.Threshold <- 500
+Streams.Binary <- ifel(SCA.Masked > 5000, 1L, 0L)
+names(Streams.Binary) <- "Stream"
 
-TsavoWest.Streams.Native <- TsavoWest.SCA.Native > Stream.Threshold
-TsavoWest.Streams.Native[TsavoWest.Streams.Native == 0L] <- NA
-TsavoWest.Streams.Native <- mask(TsavoWest.Streams.Native, TsavoWest.Native.Vect)
-names(TsavoWest.Streams.Native) <- "Stream"
+# Verify binary structure
+n_stream    <- global(Streams.Binary == 1,   "sum", na.rm = TRUE)[[1]]
+n_nonstream <- global(Streams.Binary == 0,   "sum", na.rm = TRUE)[[1]]
+n_total     <- global(!is.na(Streams.Binary), "sum", na.rm = TRUE)[[1]]
 
-cat("Stream pixels (native CRS):",
-    global(TsavoWest.Streams.Native, "sum", na.rm = TRUE)[[1]], "\n")
+cat("Stream pixels    (=1):", n_stream, "\n")
+cat("Non-stream pixels(=0):", n_nonstream, "\n")
+cat("Stream coverage   (%):", round(n_stream / n_total * 100, 2), "\n")
+
+
+# N/B!
+# gridDist() — can work correctly because:
+#   - Stream cells (1): get distance = 0
+#   - Non-stream cells (0): algorithm paths through them to find
+#     nearest stream pixel and returns distance in metres
+#   - Outside park (NA): remain NA in output
+# For geographic CRS (WGS84), gridDist uses haversine → metres
 ```
 
 ```{r}
@@ -3219,42 +3234,50 @@ cat("Stream pixels (native CRS):",
     # Computed as distance from each pixel to nearest stream pixel
 
 # Compute gridDist in native CRS — distance in metres (native units)
-cat("Computing distance to nearest water source (native CRS)...\n")
+cat("\nComputing gridDist (distance to nearest stream)...\n")
+cat("(May take 2–5 minutes for Tsavo West's extent)\n")
 
-TsavoWest.DistToWater.Native <- terra::gridDist(
-  TsavoWest.Streams.Native,
-  target = 1
+DistToWater.Native <- terra::gridDist(
+  Streams.Binary,
+  target = 1L      # compute distance to cells with value = 1 (streams)
 )
 
-# Check range before converting
-cat("Raw distance range (native units):\n")
-print(minmax(TsavoWest.DistToWater.Native))
+# Confirm it worked — expect range from 0 to several thousand metres
+cat("\nRaw distance range (metres):\n")
+print(minmax(DistToWater.Native))
 
-# Convert to km
-TsavoWest.DistToWater.Native <- TsavoWest.DistToWater.Native / 1000
-names(TsavoWest.DistToWater.Native) <- "Dist_to_Water_km"
+# Convert metres to kilometres
+DistToWater.Native.km <- DistToWater.Native / 1000
+names(DistToWater.Native.km) <- "Dist_to_Water_km"
 
-# NOW reproject to RPI CRS — safe because distance is continuous
+
+# Reproject to RPI CRS
+# Distance is continuous → bilinear interpolation is appropriate
+
 TsavoWest.DistToWater <- project(
-  TsavoWest.DistToWater.Native,
+  DistToWater.Native.km,
   crs(RPI),
   method = "bilinear"
 )
+TsavoWest.DistToWater <- mask(TsavoWest.DistToWater, TsavoWest.Vect)
+names(TsavoWest.DistToWater) <- "Dist_to_Water_km"
 
-# Reproject streams for mapping
+
+# Also rebuild the stream raster for mapping
+# Convert binary back to 1/NA format for visual clarity
+
+TsavoWest.Streams.Native <- ifel(Streams.Binary == 1, 1L, NA)
+
 TsavoWest.Streams <- project(
   TsavoWest.Streams.Native,
   crs(RPI),
   method = "near"    # nearest neighbour preserves binary values
 )
 TsavoWest.Streams <- mask(TsavoWest.Streams, TsavoWest.Vect)
+names(TsavoWest.Streams) <- "Stream"
 
-# Final mask and name
-TsavoWest.DistToWater <- mask(TsavoWest.DistToWater, TsavoWest.Vect)
-names(TsavoWest.DistToWater) <- "Dist_to_Water_km"
-
-# Confirm range — expect 0 to ~15–25 km for Tsavo West
-cat("Distance to water range (km):",
+# Final confirmation — expect 0 to ~15–25 km for Tsavo West
+cat("\nFinal distance to water range (km):",
     minmax(TsavoWest.DistToWater)[1], "to",
     minmax(TsavoWest.DistToWater)[2], "\n")
 ```
@@ -3263,7 +3286,7 @@ cat("Distance to water range (km):",
 # Step 8: Extract terrain + hydrology per zone
   # Extend the existing Pixel.CrossAnalysis table with Elevation, Slope, TRI, TWI, Distance to Water
 
-# Stack the variables we want to extract per zone
+# Rebuild terrain stack with corrected DistToWater
 Terrain.Hydro.Stack <- c(
   TsavoWest.Elevation,
   TsavoWest.Slope,
@@ -3275,23 +3298,28 @@ names(Terrain.Hydro.Stack) <- c(
   "Elevation_m", "Slope_deg", "TRI", "TWI", "Dist_to_Water_km"
 )
 
-# Reuse extract_multiband_pixels function from earlier
+# Re-extract per zone
 cat("Extracting terrain + hydrology — Tsavo West NP...\n")
-Terrain.Pixels.TsavoWest  <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest,                "Tsavo West NP")
+Terrain.Pixels.TsavoWest  <- extract_multiband_pixels(
+  Terrain.Hydro.Stack, TsavoWest, "Tsavo West NP")
 
 cat("Extracting terrain + hydrology — Ngulia Sanctuary...\n")
-Terrain.Pixels.Ngulia     <- extract_multiband_pixels(Terrain.Hydro.Stack, NguliaSanctuary,           "Ngulia Sanctuary")
+Terrain.Pixels.Ngulia     <- extract_multiband_pixels(
+  Terrain.Hydro.Stack, NguliaSanctuary, "Ngulia Sanctuary")
 
 cat("Extracting terrain + hydrology — Intensive Protection Zone...\n")
-Terrain.Pixels.IPZ        <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWestIPZ,              "Intensive Protection Zone")
+Terrain.Pixels.IPZ        <- extract_multiband_pixels(
+  Terrain.Hydro.Stack, TsavoWestIPZ, "Intensive Protection Zone")
 
 cat("Extracting terrain + hydrology — Rhino Range (combined)...\n")
-Terrain.Pixels.RhinoRange <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest.Rhino.Range,     "Rhino Range (Ngulia + IPZ)")
+Terrain.Pixels.RhinoRange <- extract_multiband_pixels(
+  Terrain.Hydro.Stack, TsavoWest.Rhino.Range, "Rhino Range (Ngulia + IPZ)")
 
 cat("Extracting terrain + hydrology — Tsavo West excl. Rhino Range...\n")
-Terrain.Pixels.TW.Excl    <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)")
+Terrain.Pixels.TW.Excl    <- extract_multiband_pixels(
+  Terrain.Hydro.Stack, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)")
 
-# Combine and pivot to wide format
+# Combine with values_fn = mean — resolves duplicate boundary pixels
 Terrain.Pixel.Wide <- bind_rows(
   Terrain.Pixels.TsavoWest,
   Terrain.Pixels.Ngulia,
@@ -3312,32 +3340,64 @@ Terrain.Pixel.Wide <- bind_rows(
     id_cols     = c(ZONE, x, y),
     names_from  = Band,
     values_from = Value,
-    values_fn   = mean        
+    values_fn   = mean        # resolves duplicate boundary pixels
   ) |>
   mutate(x = round(x, 6), y = round(y, 6))
 
-# Verify columns are now atomic numeric — not lists
+# Confirm all columns are numeric
 cat("Terrain column classes:\n")
 sapply(Terrain.Pixel.Wide |> select(-ZONE, -x, -y), class)
 
-# Join to master cross-analysis table
+
+# Rebuild Pixel.CrossAnalysis from scratch to avoid column duplication
+  # First check how many columns Pixel.CrossAnalysis currently has
+cat("\nCurrent Pixel.CrossAnalysis columns:", ncol(Pixel.CrossAnalysis), "\n")
+cat("Column names:\n")
+print(names(Pixel.CrossAnalysis))
+
+# Remove any previously joined terrain columns if they exist
+Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
+  select(-any_of(c(
+    "Elevation_m", "Slope_deg", "TRI", "TWI", "Dist_to_Water_km"
+  )))
+
+cat("\nPixel.CrossAnalysis after removing old terrain columns:",
+    ncol(Pixel.CrossAnalysis), "columns\n")
+
+# Now join the clean terrain wide table
 Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
   mutate(x = round(x, 6), y = round(y, 6)) |>
   left_join(Terrain.Pixel.Wide, by = c("ZONE", "x", "y"))
 
-cat("Extended cross-analysis table dimensions:", dim(Pixel.CrossAnalysis), "\n")
+cat("Final Pixel.CrossAnalysis dimensions:", dim(Pixel.CrossAnalysis), "\n")
+
+# Quick sanity check on terrain values
+Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  summarise(
+    N.Pixels         = n(),
+    Mean.Elevation   = round(mean(Elevation_m,       na.rm = TRUE), 1),
+    Mean.Slope       = round(mean(Slope_deg,          na.rm = TRUE), 2),
+    Mean.Dist.Water  = round(mean(Dist_to_Water_km,   na.rm = TRUE), 2),
+    Max.Dist.Water   = round(max(Dist_to_Water_km,    na.rm = TRUE), 2),
+    .groups          = "drop"
+  ) |>
+  print()
+
 
 # Zone-level terrain + hydrology summary
+
 Terrain.Zone.Summary <- Terrain.Pixel.Wide |>
   group_by(ZONE) |>
   summarise(
-    Mean.Elevation    = mean(Elevation_m,       na.rm = TRUE),
-    Mean.Slope        = mean(Slope_deg,          na.rm = TRUE),
-    Mean.TRI          = mean(TRI,                na.rm = TRUE),
-    Mean.TWI          = mean(TWI,                na.rm = TRUE),
-    Mean.Dist.Water   = mean(Dist_to_Water_km,   na.rm = TRUE),
-    Median.Dist.Water = median(Dist_to_Water_km, na.rm = TRUE),
-    Pct.Within.2km    = mean(Dist_to_Water_km < 2, na.rm = TRUE) * 100,
+    Mean.Elevation    = mean(Elevation_m,                  na.rm = TRUE),
+    Mean.Slope        = mean(Slope_deg,                    na.rm = TRUE),
+    Mean.TRI          = mean(TRI,                          na.rm = TRUE),
+    Mean.TWI          = mean(TWI,                          na.rm = TRUE),
+    Mean.Dist.Water   = mean(Dist_to_Water_km,             na.rm = TRUE),
+    Median.Dist.Water = median(Dist_to_Water_km,           na.rm = TRUE),
+    Pct.Within.2km    = mean(Dist_to_Water_km < 2,         na.rm = TRUE) * 100,
+    Pct.Within.5km    = mean(Dist_to_Water_km < 5,         na.rm = TRUE) * 100,
     .groups           = "drop"
   )
 
