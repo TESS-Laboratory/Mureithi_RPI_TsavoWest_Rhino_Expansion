@@ -2964,3 +2964,770 @@ Fig4.4.Shrub.Profiles
 ```
 
 ```{r}
+# SECTION 4B: Terrain & Hydrology Analysis
+  # Integrating topographic and hydrological variables into Tsavo West Rhino Expansion habitat intelligence framework
+```
+
+```{r}
+# Step 1: Download SRTM DEM for Tsavo West
+  # Using elevatr — automatically tiles and mosaics SRTM data
+    # z = 10 → ~76m resolution, appropriate for Tsavo West's 9,065 km²
+      # z = 11 → ~38m, usable but memory-intensive for this extent
+
+DEM.File.Path <- "C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/Terrain/TsavoWest_DEM.tif"
+
+if (!file.exists(DEM.File.Path)) {
+  
+  cat("Downloading SRTM DEM for Tsavo West NP...\n")
+  
+  # Reproject TsavoWest to WGS84 for elevatr (requires lat/lon)
+  TsavoWest.WGS84 <- st_transform(TsavoWest, 4326)
+  
+  TsavoWest.DEM.Raw <- elevatr::get_elev_raster(
+    locations = TsavoWest.WGS84,
+    z         = 10,
+    clip      = "locations"
+  )
+  
+  # Convert raster → terra SpatRaster
+  TsavoWest.Elevation <- rast(TsavoWest.DEM.Raw)
+  names(TsavoWest.Elevation) <- "Elevation_m"
+  
+  # Save to disk — avoids re-downloading
+  writeRaster(
+    TsavoWest.Elevation,
+    DEM.File.Path,
+    overwrite = TRUE
+  )
+  cat("DEM downloaded and saved.\n")
+  
+} else {
+  cat("DEM already exists — loading from disk.\n")
+  TsavoWest.Elevation <- rast(DEM.File.Path)
+}
+
+# Reproject DEM to match RPI CRS
+TsavoWest.Elevation <- project(TsavoWest.Elevation, crs(RPI))
+
+# Confirm metadata
+print(TsavoWest.Elevation)
+cat("Elevation range (m):", global(TsavoWest.Elevation, "range", na.rm = TRUE), "\n")
+```
+
+```{r}
+# Step 2: Compute Terrain Derivatives
+  # Elevation → Slope, Aspect, TPI, TRI
+    # TRI = Terrain Ruggedness Index — measures mean absolute difference between a cell and its 8 neighbours
+      # Directly relevant to large mammal movement cost
+
+cat("Computing terrain derivatives...\n")
+
+TsavoWest.Slope  <- terrain(TsavoWest.Elevation, v = "slope",  unit = "degrees")
+TsavoWest.Aspect <- terrain(TsavoWest.Elevation, v = "aspect", unit = "degrees")
+TsavoWest.TPI    <- terrain(TsavoWest.Elevation, v = "TPI")
+TsavoWest.TRI    <- terrain(TsavoWest.Elevation, v = "TRI")
+# TRI: 0 = perfectly flat, higher values = more rugged
+# Black rhinos avoid areas with TRI > ~50m (very rugged escarpments)
+
+# Stack all terrain derivatives into one object
+TsavoWest.Terrain.Stack <- c(
+  TsavoWest.Elevation,
+  TsavoWest.Slope,
+  TsavoWest.Aspect,
+  TsavoWest.TPI,
+  TsavoWest.TRI
+)
+names(TsavoWest.Terrain.Stack) <- c(
+  "Elevation_m", "Slope_deg", "Aspect_deg", "TPI", "TRI"
+)
+
+# Quick summary of terrain
+cat("\nTerrain summary for Tsavo West NP:\n")
+global(TsavoWest.Terrain.Stack, "mean", na.rm = TRUE)
+```
+
+```{r}
+# Step 3: Aspect Reclassification
+  # Convert continuous 0–360° into 8 cardinal/intercardinal
+    # directions relevant to solar exposure and moisture dynamics
+      # North/East aspects: cooler, moister → better browse quality
+        # South/West aspects: hotter, drier  → more drought stress
+
+TsavoWest.Aspect.Class <- classify(
+  TsavoWest.Aspect,
+  rcl = matrix(c(
+      0,  22.5, 1,   # North
+     22.5, 67.5, 2,  # Northeast
+     67.5,112.5, 3,  # East
+    112.5,157.5, 4,  # Southeast
+    157.5,202.5, 5,  # South
+    202.5,247.5, 6,  # Southwest
+    247.5,292.5, 7,  # West
+    292.5,337.5, 8,  # Northwest
+    337.5,360,   1   # North (wraps)
+  ), ncol = 3, byrow = TRUE),
+  include.lowest = TRUE
+)
+names(TsavoWest.Aspect.Class) <- "Aspect_Class"
+```
+
+```{r}
+# Step 4: Hydrological Processing via WhiteboxTools
+  # Full pipeline: DEM → breach → fill → SCA → TWI + streams
+    # Save each step to disk — prevents needing to rerun
+
+# Define working directory for WhiteboxTools files
+WBT.Dir <- "C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/Terrain/WBT"
+dir.create(WBT.Dir, showWarnings = FALSE, recursive = TRUE)
+
+# Export DEM to WBT directory (WhiteboxTools works with file paths)
+DEM.WBT.Path       <- file.path(WBT.Dir, "TsavoWest_DEM_WBT.tif")
+DEM.Breached.Path  <- file.path(WBT.Dir, "TsavoWest_DEM_Breached.tif")
+DEM.Filled.Path    <- file.path(WBT.Dir, "TsavoWest_DEM_Filled.tif")
+SCA.Path           <- file.path(WBT.Dir, "TsavoWest_SCA.tif")
+Slope.WBT.Path     <- file.path(WBT.Dir, "TsavoWest_Slope_WBT.tif")
+TWI.Path           <- file.path(WBT.Dir, "TsavoWest_TWI.tif")
+
+# Export DEM if not already saved for WBT
+if (!file.exists(DEM.WBT.Path)) {
+  writeRaster(TsavoWest.Elevation, DEM.WBT.Path, overwrite = TRUE)
+}
+
+# Step 4a: Breach depressions — carves flow paths through ridges
+if (!file.exists(DEM.Breached.Path)) {
+  cat("Breaching depressions...\n")
+  wbt_breach_depressions(
+    dem    = DEM.WBT.Path,
+    output = DEM.Breached.Path
+  )
+}
+```
+
+```{r}
+# Step 4b: Fill remaining depressions with flat increment
+if (!file.exists(DEM.Filled.Path)) {
+  cat("Filling depressions...\n")
+  wbt_fill_depressions(
+    dem            = DEM.Breached.Path,
+    output         = DEM.Filled.Path,
+    flat_increment = 0.001
+  )
+}
+```
+
+```{r}
+# Step 4c: Specific Catchment Area (SCA) — D8 flow accumulation
+# SCA is required as input to TWI: TWI = ln(SCA / tan(slope))
+if (!file.exists(SCA.Path)) {
+  cat("Computing Specific Catchment Area...\n")
+  wbt_d8_flow_accumulation(
+    input  = DEM.Filled.Path,
+    output = SCA.Path,
+    pntr   = FALSE
+  )
+}
+```
+
+```{r}
+# Step 4d: Slope in WhiteboxTools (must match SCA alignment exactly)
+if (!file.exists(Slope.WBT.Path)) {
+  cat("Computing WBT slope...\n")
+  wbt_slope(
+    dem    = DEM.Filled.Path,
+    output = Slope.WBT.Path
+  )
+}
+```
+
+```{r}
+# Step 4e: Topographic Wetness Index
+if (!file.exists(TWI.Path)) {
+  cat("Computing TWI...\n")
+  wbt_wetness_index(
+    sca    = SCA.Path,
+    slope  = Slope.WBT.Path,
+    output = TWI.Path
+  )
+}
+
+cat("All WhiteboxTools outputs complete.\n")
+```
+
+```{r}
+# Step 5: Load hydrological outputs back into R
+  # Clean TWI, extract streams, compute distance to water
+
+TsavoWest.SCA <- rast(SCA.Path)  |> mask(TsavoWest.Vect)
+TsavoWest.TWI <- rast(TWI.Path)  |> mask(TsavoWest.Vect)
+
+# Clean negative TWI values (artefacts from flat areas)
+TsavoWest.TWI[TsavoWest.TWI < 0] <- 0
+
+# Reproject to RPI CRS
+TsavoWest.SCA <- project(TsavoWest.SCA, crs(RPI))
+TsavoWest.TWI <- project(TsavoWest.TWI, crs(RPI))
+
+names(TsavoWest.TWI) <- "TWI"
+names(TsavoWest.SCA) <- "SCA"
+```
+
+```{r}
+# Step 6: Stream Extraction
+  # At ~76m resolution: 76 × 76 = 5,776 m² per pixel
+    # Threshold of 500 pixels = ~289 ha contributing area
+      # Captures meaningful seasonal drainage lines (luggas) relevant to rhino water access
+
+Stream.Threshold <- 500
+
+TsavoWest.Streams <- TsavoWest.SCA > Stream.Threshold
+TsavoWest.Streams[TsavoWest.Streams == 0L] <- NA
+TsavoWest.Streams <- mask(TsavoWest.Streams, TsavoWest.Vect)
+names(TsavoWest.Streams) <- "Stream"
+
+cat("Stream pixels extracted:",
+    global(TsavoWest.Streams, "sum", na.rm = TRUE)[[1]], "\n")
+```
+
+```{r}
+# Step 7: Distance to Water
+  # The single most important habitat requirement for black rhinos that RPI does not capture — rhinos need water every 2–4 days
+    # Computed as distance from each pixel to nearest stream pixel
+
+cat("Computing distance to nearest water source...\n")
+cat("(This may take several minutes for Tsavo West's extent)\n")
+
+# Convert stream raster to points, then compute distance
+# gridDist() is memory-efficient for large rasters
+TsavoWest.DistToWater <- terra::gridDist(
+  TsavoWest.Streams,
+  target = 1      # distance to pixels with value = 1 (streams)
+)
+
+# Convert from metres to kilometres
+TsavoWest.DistToWater <- TsavoWest.DistToWater / 1000
+names(TsavoWest.DistToWater) <- "Dist_to_Water_km"
+
+# Mask to Tsavo West
+TsavoWest.DistToWater <- mask(TsavoWest.DistToWater, TsavoWest.Vect)
+
+cat("Distance to water range (km):",
+    global(TsavoWest.DistToWater, "range", na.rm = TRUE), "\n")
+```
+
+```{r}
+# Step 8: Extract terrain + hydrology per zone
+  # Extend the existing Pixel.CrossAnalysis table with Elevation, Slope, TRI, TWI, Distance to Water
+
+# Stack the variables we want to extract per zone
+Terrain.Hydro.Stack <- c(
+  TsavoWest.Elevation,
+  TsavoWest.Slope,
+  TsavoWest.TRI,
+  TsavoWest.TWI,
+  TsavoWest.DistToWater
+)
+names(Terrain.Hydro.Stack) <- c(
+  "Elevation_m", "Slope_deg", "TRI", "TWI", "Dist_to_Water_km"
+)
+
+# Reuse extract_multiband_pixels function from earlier
+cat("Extracting terrain + hydrology — Tsavo West NP...\n")
+Terrain.Pixels.TsavoWest  <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest,                "Tsavo West NP")
+
+cat("Extracting terrain + hydrology — Ngulia Sanctuary...\n")
+Terrain.Pixels.Ngulia     <- extract_multiband_pixels(Terrain.Hydro.Stack, NguliaSanctuary,           "Ngulia Sanctuary")
+
+cat("Extracting terrain + hydrology — Intensive Protection Zone...\n")
+Terrain.Pixels.IPZ        <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWestIPZ,              "Intensive Protection Zone")
+
+cat("Extracting terrain + hydrology — Rhino Range (combined)...\n")
+Terrain.Pixels.RhinoRange <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest.Rhino.Range,     "Rhino Range (Ngulia + IPZ)")
+
+cat("Extracting terrain + hydrology — Tsavo West excl. Rhino Range...\n")
+Terrain.Pixels.TW.Excl    <- extract_multiband_pixels(Terrain.Hydro.Stack, TsavoWest.Excl.RhinoRange, "Tsavo West (excl. Rhino Range)")
+
+# Combine and pivot to wide format
+Terrain.Pixel.Wide <- bind_rows(
+  Terrain.Pixels.TsavoWest,
+  Terrain.Pixels.Ngulia,
+  Terrain.Pixels.IPZ,
+  Terrain.Pixels.RhinoRange,
+  Terrain.Pixels.TW.Excl
+) |>
+  mutate(
+    ZONE = fct_relevel(ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    )
+  ) |>
+  pivot_wider(
+    id_cols     = c(ZONE, x, y),
+    names_from  = Band,
+    values_from = Value
+  ) |>
+  mutate(x = round(x, 6), y = round(y, 6))
+
+# Join to master cross-analysis table
+Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
+  mutate(x = round(x, 6), y = round(y, 6)) |>
+  left_join(Terrain.Pixel.Wide, by = c("ZONE", "x", "y"))
+
+cat("Extended cross-analysis table dimensions:", dim(Pixel.CrossAnalysis), "\n")
+
+# Zone-level terrain + hydrology summary
+Terrain.Zone.Summary <- Terrain.Pixel.Wide |>
+  group_by(ZONE) |>
+  summarise(
+    Mean.Elevation    = mean(Elevation_m,       na.rm = TRUE),
+    Mean.Slope        = mean(Slope_deg,          na.rm = TRUE),
+    Mean.TRI          = mean(TRI,                na.rm = TRUE),
+    Mean.TWI          = mean(TWI,                na.rm = TRUE),
+    Mean.Dist.Water   = mean(Dist_to_Water_km,   na.rm = TRUE),
+    Median.Dist.Water = median(Dist_to_Water_km, na.rm = TRUE),
+    Pct.Within.2km    = mean(Dist_to_Water_km < 2, na.rm = TRUE) * 100,
+    .groups           = "drop"
+  )
+
+cat("\n--- Terrain & Hydrology Zone Summary ---\n")
+print(Terrain.Zone.Summary)
+```
+
+```{r}
+# SECTION 4B MAPS
+
+tmap_mode("view")
+```
+
+```{r}
+# Map B1: Elevation
+Map.Elevation <- tm_shape(TsavoWest.Elevation) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "-terrain",
+      breaks = c(400, 600, 800, 1000, 1200, 1500, 1900),
+      labels = c(
+        "< 600m (Hot lowland savanna)",
+        "600–800m (Transitional savanna)",
+        "800–1000m (Woodland-savanna)",
+        "1000–1200m (Cooler mixed woodland)",
+        "1200–1500m (Ngulia footslopes)",
+        "> 1500m (Ngulia Hills summit)"
+      )
+    ),
+    col_alpha  = 0.8,
+    col.legend = tm_legend(title = "Elevation (m)")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_shape(NguliaSanctuary) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "#762a83", lwd = 2, id = "NAME") +
+  tm_title("Elevation — Tsavo West NP\nWhite outline = Rhino Range | Purple = Ngulia Sanctuary") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Map B2: Slope
+Map.Slope <- tm_shape(TsavoWest.Slope) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "brewer.yl_or_rd",
+      breaks = c(0, 5, 15, 30, 50, 90),
+      labels = c(
+        "0–5° (Flat/gentle — optimal rhino terrain)",
+        "5–15° (Rolling — usable by rhinos)",
+        "15–30° (Moderately steep — limited use)",
+        "30–50° (Steep — barrier to movement)",
+        "> 50° (Escarpment — impassable)"
+      )
+    ),
+    col_alpha  = 0.8,
+    col.legend = tm_legend(title = "Slope (°)")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_title("Slope — Tsavo West NP\nClassified by black rhino movement feasibility") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Map B3: TRI — Terrain Ruggedness Index
+Map.TRI <- tm_shape(TsavoWest.TRI) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "brewer.yl_or_br",
+      style  = "quantile",
+      n      = 5,
+      labels = c(
+        "Very Low (Plains — easy movement)",
+        "Low (Gentle undulations)",
+        "Moderate (Rolling terrain)",
+        "High (Rugged — movement costs elevated)",
+        "Very High (Escarpments — movement barrier)"
+      )
+    ),
+    col_alpha  = 0.8,
+    col.legend = tm_legend(title = "TRI (Ruggedness)")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_title("Terrain Ruggedness Index — Tsavo West NP\nLower values = lower movement cost for rhinos") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Map B4: TWI
+Map.TWI <- tm_shape(TsavoWest.TWI) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "brewer.yl_gn_bu",
+      breaks = c(0, 5, 8, 12, 16, 30),
+      labels = c(
+        "< 5 (Very dry — ridge tops)",
+        "5–8 (Dry — upper slopes)",
+        "8–12 (Moist — plains & lower slopes)",
+        "12–16 (Wet — valley floors)",
+        "> 16 (Saturated — drainage channels)"
+      )
+    ),
+    col_alpha  = 0.8,
+    col.legend = tm_legend(title = "TWI")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_title("Topographic Wetness Index — Tsavo West NP\nHigher values = greater soil moisture accumulation") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Map B5: Distance to Water — the key expansion constraint map
+Map.DistToWater <- tm_shape(TsavoWest.DistToWater) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "brewer.rd_yl_gn",
+      breaks = c(0, 2, 5, 10, 20, 50),
+      labels = c(
+        "< 2km (Within daily rhino range of water)",
+        "2–5km (Accessible — within extended range)",
+        "5–10km (Marginal — seasonal water dependency)",
+        "10–20km (Poor water access)",
+        "> 20km (Unsuitable — water-limited)"
+      )
+    ),
+    col_alpha  = 0.85,
+    col.legend = tm_legend(title = "Distance to\nWater (km)")
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_shape(NguliaSanctuary) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "#762a83", lwd = 2, id = "NAME") +
+  tm_title("Distance to Nearest Water Source — Tsavo West NP\nCritical constraint for black rhino expansion feasibility") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Map B6: TWI + Stream Network combined
+Map.Hydro.Combined <- tm_shape(TsavoWest.TWI) +
+  tm_raster(
+    col.scale = tm_scale_intervals(
+      values = "brewer.yl_gn_bu",
+      breaks = c(0, 5, 8, 12, 16, 30),
+      labels = c("Very Dry", "Dry", "Moist", "Wet", "Saturated")
+    ),
+    col_alpha  = 0.65,
+    col.legend = tm_legend(title = "TWI")
+  ) +
+  tm_shape(TsavoWest.Streams) +
+  tm_raster(
+    col.scale   = tm_scale_categorical(values = "#1f78b4"),
+    col.legend  = tm_legend(show = FALSE)
+  ) +
+  tm_shape(TsavoWest) +
+  tm_borders(col = "black", lwd = 2) +
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
+  tm_title("Hydrological Network + Soil Moisture Potential\nBlue lines = drainage network (contributing area > 289 ha)") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
+                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+```
+
+```{r}
+# Render maps individually first
+Map.Elevation
+Map.Slope
+Map.TRI
+Map.TWI
+Map.DistToWater
+Map.Hydro.Combined
+```
+
+```{r}
+# SECTION 4B FIGURES — Terrain + Hydrology × RPI
+
+# Subsample for plotting
+set.seed(42)
+Pixel.Terrain.Sample <- Pixel.CrossAnalysis |>
+  filter(!is.na(Elevation_m), !is.na(Dist_to_Water_km)) |>
+  group_by(ZONE) |>
+  slice_sample(n = 3000) |>
+  ungroup()
+```
+
+```{r}
+# Figure B1: Terrain profiles per zone (violin + box)
+  # Four panels: Elevation, Slope, TRI, Distance to Water
+Terrain.Long <- Pixel.Terrain.Sample |>
+  filter(ZONE %in% c(
+    "Tsavo West NP",
+    "Tsavo West (excl. Rhino Range)",
+    "Rhino Range (Ngulia + IPZ)"
+  )) |>
+  select(ZONE, Elevation_m, Slope_deg, TRI, Dist_to_Water_km) |>
+  pivot_longer(
+    cols      = c(Elevation_m, Slope_deg, TRI, Dist_to_Water_km),
+    names_to  = "Terrain.Var",
+    values_to = "Value"
+  ) |>
+  mutate(
+    Terrain.Var = fct_recode(Terrain.Var,
+      "Elevation (m)"           = "Elevation_m",
+      "Slope (°)"               = "Slope_deg",
+      "Terrain Ruggedness (TRI)"= "TRI",
+      "Distance to Water (km)"  = "Dist_to_Water_km"
+    ),
+    Terrain.Var = fct_relevel(Terrain.Var,
+      "Elevation (m)", "Slope (°)",
+      "Terrain Ruggedness (TRI)", "Distance to Water (km)"
+    )
+  )
+
+FigB1.Terrain.Profiles <- ggplot(
+  Terrain.Long,
+  aes(x = ZONE, y = Value, fill = ZONE, colour = ZONE)
+) +
+  geom_violin(alpha = 0.3, linewidth = 0.4, trim = TRUE, scale = "width") +
+  geom_boxplot(width = 0.15, alpha = 0.75, linewidth = 0.45, outlier.shape = NA) +
+  stat_summary(fun = median, geom = "point",
+               shape = 21, size = 2, fill = "white",
+               colour = "black", stroke = 0.7) +
+  scale_fill_manual(values   = Zone.Colours) +
+  scale_colour_manual(values = Zone.Colours) +
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 12)) +
+  facet_wrap(~ Terrain.Var, ncol = 2, scales = "free_y") +
+  labs(
+    title    = "Terrain & Hydrology Profiles by Zone — Tsavo West NP",
+    subtitle = "Violin + boxplot shows full pixel-level distribution per zone",
+    x        = NULL,
+    y        = "Value",
+    caption  = "SRTM DEM at ~76m resolution. Distance to water derived from D8 flow accumulation (threshold = 289 ha)."
+  ) +
+  theme_rpi() +
+  theme(legend.position = "none")
+
+FigB1.Terrain.Profiles
+```
+
+```{r}
+# Figure B2: RPI × Elevation — the Ngulia orographic story
+FigB2.RPI.Elevation <- ggplot(
+  Pixel.Terrain.Sample |>
+    filter(ZONE %in% c(
+      "Rhino Range (Ngulia + IPZ)",
+      "Tsavo West (excl. Rhino Range)",
+      "Tsavo West NP"
+    )),
+  aes(x = Elevation_m, y = Mean.RPI)
+) +
+  geom_hex(aes(fill = after_stat(count)), bins = 35, colour = NA) +
+  scale_fill_scico(palette = "lajolla", name = "Pixel\ncount", trans = "log10") +
+  geom_smooth(method = "loess", se = TRUE,
+              colour = "#1b7837", fill = "#1b7837",
+              alpha = 0.15, linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed",
+             colour = "grey50", linewidth = 0.5) +
+  # Annotate Ngulia Hills elevation band
+  annotate("rect", xmin = 1200, xmax = 1900,
+           ymin = -Inf, ymax = Inf,
+           fill = "#762a83", alpha = 0.06) +
+  annotate("text", x = 1550, y = 1.45,
+           label = "Ngulia\nHills", size = 2.8,
+           colour = "#762a83", fontface = "italic") +
+  facet_wrap(~ ZONE, ncol = 3, scales = "fixed") +
+  scale_x_continuous(breaks = seq(400, 1900, by = 300)) +
+  scale_y_continuous(limits = c(0, 1.6), breaks = seq(0, 1.5, by = 0.25)) +
+  labs(
+    title    = "Relationship Between Elevation and Habitat Productivity (RPI)",
+    subtitle = "Purple shading = Ngulia Hills elevation band (>1200m) | Green line = LOESS smoother",
+    x        = "Elevation (m asl)",
+    y        = "Mean RPI (2000–2023)",
+    caption  = "Elevation from SRTM DEM (~76m). RPI averaged across 22 hydrological years per pixel."
+  ) +
+  theme_rpi()
+
+FigB2.RPI.Elevation
+```
+
+```{r}
+# Figure B3: RPI × Distance to Water — the key expansion constraint
+FigB3.RPI.DistWater <- ggplot(
+  Pixel.Terrain.Sample |>
+    filter(ZONE %in% c(
+      "Rhino Range (Ngulia + IPZ)",
+      "Tsavo West (excl. Rhino Range)",
+      "Tsavo West NP"
+    )),
+  aes(x = Dist_to_Water_km, y = Mean.RPI)
+) +
+  geom_hex(aes(fill = after_stat(count)), bins = 35, colour = NA) +
+  scale_fill_scico(palette = "lajolla", name = "Pixel\ncount", trans = "log10") +
+  geom_smooth(method = "loess", se = TRUE,
+              colour = "#1b7837", fill = "#1b7837",
+              alpha = 0.15, linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dashed",
+             colour = "grey50", linewidth = 0.5) +
+  # Annotate the 2km critical threshold
+  geom_vline(xintercept = 2, linetype = "dashed",
+             colour = "#d95f02", linewidth = 0.7) +
+  annotate("text", x = 2.2, y = 1.50,
+           label = "2km threshold\n(daily water access)",
+           size = 2.8, colour = "#d95f02",
+           hjust = 0, fontface = "italic") +
+  facet_wrap(~ ZONE, ncol = 3, scales = "fixed") +
+  scale_x_continuous(breaks = seq(0, 50, by = 10)) +
+  scale_y_continuous(limits = c(0, 1.6), breaks = seq(0, 1.5, by = 0.25)) +
+  labs(
+    title    = "Relationship Between Distance to Water and Habitat Productivity (RPI)",
+    subtitle = "Orange dashed line = 2km critical threshold for daily rhino water access",
+    x        = "Distance to Nearest Water Source (km)",
+    y        = "Mean RPI (2000–2023)",
+    caption  = "Distance to water derived from stream network (D8 flow accumulation, threshold = 289 ha contributing area)."
+  ) +
+  theme_rpi()
+
+FigB3.RPI.DistWater
+```
+
+```{r}
+# Figure B4: Extended Spearman correlation heatmap
+# Now including terrain + hydrology variables
+Spearman.Extended <- Pixel.CrossAnalysis |>
+  filter(!is.na(Elevation_m), !is.na(Dist_to_Water_km)) |>
+  group_by(ZONE) |>
+  summarise(
+    r.Shrubland    = cor(Mean.RPI, Shrubland.Pct,    method = "spearman", use = "complete.obs"),
+    r.Grassland    = cor(Mean.RPI, Grassland.Pct,    method = "spearman", use = "complete.obs"),
+    r.GPP          = cor(Mean.RPI, GPP.Annual,        method = "spearman", use = "complete.obs"),
+    r.Ec           = cor(Mean.RPI, Ec.Annual,         method = "spearman", use = "complete.obs"),
+    r.Elevation    = cor(Mean.RPI, Elevation_m,       method = "spearman", use = "complete.obs"),
+    r.Slope        = cor(Mean.RPI, Slope_deg,         method = "spearman", use = "complete.obs"),
+    r.TRI          = cor(Mean.RPI, TRI,               method = "spearman", use = "complete.obs"),
+    r.TWI          = cor(Mean.RPI, TWI,               method = "spearman", use = "complete.obs"),
+    r.DistWater    = cor(Mean.RPI, Dist_to_Water_km,  method = "spearman", use = "complete.obs"),
+    .groups = "drop"
+  ) |>
+  pivot_longer(
+    cols      = starts_with("r."),
+    names_to  = "Variable",
+    values_to = "Spearman.r"
+  ) |>
+  mutate(
+    Variable = fct_recode(Variable,
+      "Shrubland (%)"          = "r.Shrubland",
+      "Grassland (%)"          = "r.Grassland",
+      "GPP (gC/m²/yr)"        = "r.GPP",
+      "Canopy Transpiration"   = "r.Ec",
+      "Elevation (m)"          = "r.Elevation",
+      "Slope (°)"              = "r.Slope",
+      "Ruggedness (TRI)"       = "r.TRI",
+      "Wetness (TWI)"          = "r.TWI",
+      "Dist. to Water (km)"    = "r.DistWater"
+    ),
+    # Group variables by type for visual separation
+    Variable.Group = case_when(
+      Variable %in% c("GPP (gC/m²/yr)", "Canopy Transpiration")     ~ "Flux",
+      Variable %in% c("Shrubland (%)", "Grassland (%)")              ~ "Land Cover",
+      TRUE                                                            ~ "Terrain & Hydrology"
+    ),
+    Variable = fct_relevel(Variable,
+      "GPP (gC/m²/yr)", "Canopy Transpiration",
+      "Shrubland (%)", "Grassland (%)",
+      "Elevation (m)", "Slope (°)", "Ruggedness (TRI)",
+      "Wetness (TWI)", "Dist. to Water (km)"
+    )
+  )
+
+FigB4.Extended.Heatmap <- ggplot(
+  Spearman.Extended,
+  aes(x = Variable, y = ZONE, fill = Spearman.r)
+) +
+  geom_tile(colour = "white", linewidth = 0.8) +
+  geom_text(
+    aes(
+      label  = round(Spearman.r, 2),
+      colour = abs(Spearman.r) > 0.35
+    ),
+    size = 3.5, fontface = "bold"
+  ) +
+  scale_colour_manual(
+    values = c("TRUE" = "white", "FALSE" = "grey20"),
+    guide  = "none"
+  ) +
+  scale_fill_scico(
+    palette  = "vik",
+    limits   = c(-1, 1),
+    midpoint = 0,
+    name     = "Spearman\ncorrelation (r)"
+  ) +
+  scale_x_discrete(
+    labels = function(x) stringr::str_wrap(x, width = 12)
+  ) +
+  # Visual separator between variable groups
+  geom_vline(xintercept = c(2.5, 4.5), colour = "grey60",
+             linewidth = 0.8, linetype = "dashed") +
+  annotate("text", x = 1.5,  y = 5.6, label = "Fluxes",
+           size = 2.8, colour = "grey40", fontface = "italic") +
+  annotate("text", x = 3.5,  y = 5.6, label = "Land Cover",
+           size = 2.8, colour = "grey40", fontface = "italic") +
+  annotate("text", x = 7,    y = 5.6, label = "Terrain & Hydrology",
+           size = 2.8, colour = "grey40", fontface = "italic") +
+  labs(
+    title    = "Spearman Correlations: Mean RPI vs. Habitat Variables (Extended)",
+    subtitle = "Positive r = positively associated with productivity | Negative r = inversely associated",
+    x        = NULL,
+    y        = NULL,
+    caption  = "Spearman rank correlation at pixel level per zone. Variables grouped by type (dashed lines)."
+  ) +
+  theme_rpi() +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 9),
+    panel.grid  = element_blank()
+  )
+
+FigB4.Extended.Heatmap
+```
+
+```{r}
