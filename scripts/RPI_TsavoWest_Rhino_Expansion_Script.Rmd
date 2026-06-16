@@ -2379,7 +2379,458 @@ Fig3.4.RPI.Spatial.Gap.Map
 ```
 
 ```{r}
+# SECTION 4(A): Land Cover × RPI Cross-Analysis
+  # Linking PMLv2/StudyPixels to RPI for habitat characterisation
+    # Answering: WHY does the productivity gap exist?
+```
 
+```{r}
+# Step 1: Collapse RPI pixels to mean per pixel
+  # Average across all 22 hydrological years per pixel
+    # This gives one representative RPI value per spatial location
+
+RPI.Pixel.Mean <- RPI.All.Zones.Pixels |>
+  group_by(ZONE, x, y) |>
+  summarise(
+    Mean.RPI    = mean(RPI,    na.rm = TRUE),
+    Median.RPI  = median(RPI,  na.rm = TRUE),
+    SD.RPI      = sd(RPI,      na.rm = TRUE),
+    CV.RPI      = sd(RPI, na.rm = TRUE) / mean(RPI, na.rm = TRUE), # Coefficient of variation
+    .groups     = "drop"
+  )
+
+cat("Pixel-level mean RPI table dimensions:", dim(RPI.Pixel.Mean), "\n")
+```
+
+```{r}
+# Step 2: Pivot cover pixels to wide format
+  # One row per pixel, one column per cover type
+
+Cover.Pixel.Wide <- Cover.All.Zones.Pixels |>
+  pivot_wider(
+    id_cols     = c(ZONE, x, y),
+    names_from  = Band,
+    values_from = Value
+  ) |>
+  # Clean column names for easier referencing
+  rename(
+    Shrubland.Pct  = `Shrubland Cover (%)`,
+    Grassland.Pct  = `Grassland Cover (%)`,
+    Tree.Pct       = `Tree Cover (%)`,
+    Bare.Pct       = `Bare Ground (%)`,
+    Rangeland.Pct  = `All Rangelands (%)`
+  )
+
+cat("Cover pixel wide table dimensions:", dim(Cover.Pixel.Wide), "\n")
+```
+
+```{r}
+# Step 3: Pivot PMLv2 pixels to wide format
+
+PMLv2.Pixel.Wide <- PMLv2.All.Zones.Pixels |>
+  pivot_wider(
+    id_cols     = c(ZONE, x, y),
+    names_from  = Band,
+    values_from = Value
+  ) |>
+  rename(
+    GPP.Annual  = `GPP (gC/m²/yr)`,
+    Ec.Annual   = `Canopy Transpiration (mm)`,
+    Es.Annual   = `Soil Evaporation (mm)`,
+    Ei.Annual   = `Interception (mm)`
+  )
+
+cat("PMLv2 pixel wide table dimensions:", dim(PMLv2.Pixel.Wide), "\n")
+```
+
+```{r}
+# Step 4: Build the master pixel-level cross-analysis table
+  # Join RPI mean + cover + PMLv2 by zone and pixel coordinates
+    # Note: round x/y to 6 decimal places before joining to avoid
+      # floating-point mismatch between extraction runs
+
+RPI.Pixel.Mean <- RPI.Pixel.Mean |>
+  mutate(x = round(x, 6), y = round(y, 6))
+
+Cover.Pixel.Wide <- Cover.Pixel.Wide |>
+  mutate(x = round(x, 6), y = round(y, 6))
+
+PMLv2.Pixel.Wide <- PMLv2.Pixel.Wide |>
+  mutate(x = round(x, 6), y = round(y, 6))
+
+Pixel.CrossAnalysis <- RPI.Pixel.Mean |>
+  left_join(Cover.Pixel.Wide, by = c("ZONE", "x", "y")) |>
+  left_join(PMLv2.Pixel.Wide, by = c("ZONE", "x", "y")) |>
+  filter(
+    !is.na(Shrubland.Pct),
+    !is.na(GPP.Annual)
+  )
+
+cat("Master cross-analysis table dimensions:", dim(Pixel.CrossAnalysis), "\n")
+
+# Quick check — confirm join worked across zones
+Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  summarise(
+    N.Pixels      = n(),
+    Mean.RPI      = round(mean(Mean.RPI,       na.rm = TRUE), 3),
+    Mean.Shrub    = round(mean(Shrubland.Pct,  na.rm = TRUE), 1),
+    Mean.GPP      = round(mean(GPP.Annual,     na.rm = TRUE), 1)
+  ) |>
+  print()
+```
+
+```{r}
+# Step 5: Subsample for plotting
+  # Hexbin handles large N well but we cap per zone for balance
+
+set.seed(42)
+Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  slice_sample(n = 3000) |>
+  ungroup()
+```
+
+```{r}
+# FIGURE 4.1: Mean RPI × Shrubland Cover (%)
+  # The primary mechanistic relationship — shrubland as the
+    # driver of productivity advantage in the Rhino Range
+
+Fig4.1.RPI.Shrub <- ggplot(
+  Pixel.CrossAnalysis.Sample |>
+    filter(ZONE %in% c(
+      "Rhino Range (Ngulia + IPZ)",
+      "Tsavo West (excl. Rhino Range)",
+      "Tsavo West NP"
+    )),
+  aes(x = Shrubland.Pct, y = Mean.RPI)
+) +
+
+  # Hexbin density layer
+  geom_hex(
+    aes(fill = after_stat(count)),
+    bins      = 35,
+    colour    = NA
+  ) +
+
+  scale_fill_scico(
+    palette = "lajolla",
+    name    = "Pixel\ncount",
+    trans   = "log10"
+  ) +
+
+  # Smoothed trend line per facet
+  geom_smooth(
+    method    = "loess",
+    se        = TRUE,
+    colour    = "#1b7837",
+    fill      = "#1b7837",
+    alpha     = 0.15,
+    linewidth = 1
+  ) +
+
+  # Reference line at RPI = 1
+  geom_hline(
+    yintercept = 1,
+    linetype   = "dashed",
+    colour     = "grey50",
+    linewidth  = 0.5
+  ) +
+
+  facet_wrap(
+    ~ ZONE,
+    ncol   = 3,
+    scales = "fixed"
+  ) +
+
+  scale_x_continuous(
+    breaks = seq(0, 100, by = 20),
+    labels = scales::label_number(suffix = "%")
+  ) +
+
+  scale_y_continuous(
+    limits = c(0, 1.6),
+    breaks = seq(0, 1.5, by = 0.25)
+  ) +
+
+  labs(
+    title    = "Relationship Between Shrubland Cover and Habitat Productivity (RPI)",
+    subtitle = "Each hexagon represents pixel density. Green line = LOESS smoother with 95% CI.",
+    x        = "Shrubland Cover (%)",
+    y        = "Mean RPI (2000–2023)",
+    caption  = "Mean RPI averaged across 22 hydrological years per pixel. Shrubland cover from ESA WorldCover resampled to 500m."
+  ) +
+
+  theme_rpi()
+
+Fig4.1.RPI.Shrub
+```
+
+```{r}
+# FIGURE 4.2: Mean RPI × Grassland Cover (%)
+  # The counterpart — grassland as lower-productivity habitat
+
+Fig4.2.RPI.Grass <- ggplot(
+  Pixel.CrossAnalysis.Sample |>
+    filter(ZONE %in% c(
+      "Rhino Range (Ngulia + IPZ)",
+      "Tsavo West (excl. Rhino Range)",
+      "Tsavo West NP"
+    )),
+  aes(x = Grassland.Pct, y = Mean.RPI)
+) +
+
+  geom_hex(
+    aes(fill = after_stat(count)),
+    bins   = 35,
+    colour = NA
+  ) +
+
+  scale_fill_scico(
+    palette = "lajolla",
+    name    = "Pixel\ncount",
+    trans   = "log10"
+  ) +
+
+  geom_smooth(
+    method    = "loess",
+    se        = TRUE,
+    colour    = "#d95f02",
+    fill      = "#d95f02",
+    alpha     = 0.15,
+    linewidth = 1
+  ) +
+
+  geom_hline(
+    yintercept = 1,
+    linetype   = "dashed",
+    colour     = "grey50",
+    linewidth  = 0.5
+  ) +
+
+  facet_wrap(~ ZONE, ncol = 3, scales = "fixed") +
+
+  scale_x_continuous(
+    breaks = seq(0, 100, by = 20),
+    labels = scales::label_number(suffix = "%")
+  ) +
+
+  scale_y_continuous(
+    limits = c(0, 1.6),
+    breaks = seq(0, 1.5, by = 0.25)
+  ) +
+
+  labs(
+    title    = "Relationship Between Grassland Cover and Habitat Productivity (RPI)",
+    subtitle = "Each hexagon represents pixel density. Orange line = LOESS smoother with 95% CI.",
+    x        = "Grassland Cover (%)",
+    y        = "Mean RPI (2000–2023)",
+    caption  = "Mean RPI averaged across 22 hydrological years per pixel. Grassland cover from ESA WorldCover resampled to 500m."
+  ) +
+
+  theme_rpi()
+
+Fig4.2.RPI.Grass
+```
+
+```{r}
+# FIGURE 4.3: Spearman Correlation Heatmap
+  # All cover + flux variables × all zones
+
+# Compute Spearman correlations per zone
+Spearman.Correlations <- Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  summarise(
+    r.Shrubland  = cor(Mean.RPI, Shrubland.Pct, method = "spearman", use = "complete.obs"),
+    r.Grassland  = cor(Mean.RPI, Grassland.Pct, method = "spearman", use = "complete.obs"),
+    r.Tree       = cor(Mean.RPI, Tree.Pct,       method = "spearman", use = "complete.obs"),
+    r.Bare       = cor(Mean.RPI, Bare.Pct,       method = "spearman", use = "complete.obs"),
+    r.GPP        = cor(Mean.RPI, GPP.Annual,     method = "spearman", use = "complete.obs"),
+    r.Ec         = cor(Mean.RPI, Ec.Annual,       method = "spearman", use = "complete.obs"),
+    r.Es         = cor(Mean.RPI, Es.Annual,       method = "spearman", use = "complete.obs"),
+    .groups = "drop"
+  ) |>
+  pivot_longer(
+    cols      = starts_with("r."),
+    names_to  = "Variable",
+    values_to = "Spearman.r"
+  ) |>
+  mutate(
+    Variable = fct_recode(Variable,
+      "Shrubland (%)"          = "r.Shrubland",
+      "Grassland (%)"          = "r.Grassland",
+      "Tree Cover (%)"         = "r.Tree",
+      "Bare Ground (%)"        = "r.Bare",
+      "GPP (gC/m²/yr)"        = "r.GPP",
+      "Canopy Transpiration"   = "r.Ec",
+      "Soil Evaporation"       = "r.Es"
+    ),
+    # Logical variable ordering
+    Variable = fct_relevel(
+      Variable,
+      "GPP (gC/m²/yr)", "Canopy Transpiration", "Soil Evaporation",
+      "Shrubland (%)", "Grassland (%)", "Tree Cover (%)", "Bare Ground (%)"
+    )
+  )
+
+Fig4.3.Correlation.Heatmap <- ggplot(
+  Spearman.Correlations,
+  aes(x = Variable, y = ZONE, fill = Spearman.r)
+) +
+
+  geom_tile(colour = "white", linewidth = 0.8) +
+
+  # Correlation value labels
+  geom_text(
+    aes(
+      label  = round(Spearman.r, 2),
+      colour = abs(Spearman.r) > 0.4   # white text on dark tiles
+    ),
+    size     = 3.5,
+    fontface = "bold"
+  ) +
+
+  scale_colour_manual(
+    values = c("TRUE" = "white", "FALSE" = "grey20"),
+    guide  = "none"
+  ) +
+
+  scale_fill_scico(
+    palette  = "vik",
+    limits   = c(-1, 1),
+    midpoint = 0,
+    name     = "Spearman\ncorrelation (r)"
+  ) +
+
+  scale_x_discrete(
+    labels = function(x) stringr::str_wrap(x, width = 12)
+  ) +
+
+  labs(
+    title    = "Spearman Correlations: Mean RPI vs. Land Cover & Flux Variables",
+    subtitle = "Positive r = variable positively associated with higher RPI | Negative r = associated with lower RPI",
+    x        = NULL,
+    y        = NULL,
+    caption  = "Spearman rank correlation computed at pixel level per zone (full pixel population, not subsampled)."
+  ) +
+
+  theme_rpi() +
+  theme(
+    axis.text.x     = element_text(angle = 30, hjust = 1, size = 9),
+    axis.text.y     = element_text(size  = 9),
+    panel.grid      = element_blank()
+  )
+
+Fig4.3.Correlation.Heatmap
+```
+
+```{r}
+# FIGURE 4.4: IGBP Land Cover Class RPI Profiles
+  # Mean RPI broken down by IGBP class per zone
+    # Shows whether land cover class explains within-zone variation
+
+# Join IGBP class to pixel cross-analysis table
+IGBP.Pixel <- terra::extract(
+  StudyPixels.TsavoWest[["igbp"]],
+  vect(TsavoWest),
+  xy = TRUE
+) |>
+  as_tibble() |>
+  rename(IGBP.Class = igbp) |>
+  filter(!is.na(IGBP.Class)) |>
+  mutate(
+    x = round(x, 6),
+    y = round(y, 6),
+    IGBP.Label = case_when(
+      IGBP.Class == 6  ~ "Closed\nShrubland",
+      IGBP.Class == 7  ~ "Open\nShrubland",
+      IGBP.Class == 8  ~ "Woody\nSavanna",
+      IGBP.Class == 9  ~ "Savanna",
+      IGBP.Class == 10 ~ "Grassland",
+      TRUE             ~ paste0("Class ", IGBP.Class)
+    )
+  )
+
+# Join IGBP to pixel cross-analysis
+Pixel.IGBP.RPI <- Pixel.CrossAnalysis |>
+  mutate(x = round(x, 6), y = round(y, 6)) |>
+  left_join(
+    IGBP.Pixel |> select(x, y, IGBP.Label),
+    by = c("x", "y")
+  ) |>
+  filter(!is.na(IGBP.Label)) |>
+  filter(ZONE %in% c(
+    "Tsavo West NP",
+    "Tsavo West (excl. Rhino Range)",
+    "Rhino Range (Ngulia + IPZ)"
+  ))
+
+# IGBP colour palette
+IGBP.Colours <- c(
+  "Closed\nShrubland" = "#1a6b1a",
+  "Open\nShrubland"   = "#74c476",
+  "Woody\nSavanna"    = "#DAA520",
+  "Savanna"           = "#FFD700",
+  "Grassland"         = "#F0E68C"
+)
+
+Fig4.4.IGBP.Profiles <- ggplot(
+  Pixel.IGBP.RPI,
+  aes(x = IGBP.Label, y = Mean.RPI, fill = IGBP.Label)
+) +
+
+  geom_violin(
+    alpha     = 0.4,
+    linewidth = 0.4,
+    trim      = TRUE,
+    scale     = "width"
+  ) +
+
+  geom_boxplot(
+    width         = 0.2,
+    alpha         = 0.8,
+    linewidth     = 0.4,
+    outlier.shape = NA
+  ) +
+
+  stat_summary(
+    fun      = median,
+    geom     = "point",
+    shape    = 21,
+    size     = 2,
+    fill     = "white",
+    colour   = "black",
+    stroke   = 0.7
+  ) +
+
+  geom_hline(
+    yintercept = 1,
+    linetype   = "dashed",
+    colour     = "grey50",
+    linewidth  = 0.5
+  ) +
+
+  facet_wrap(~ ZONE, ncol = 3) +
+
+  scale_fill_manual(values = IGBP.Colours) +
+
+  scale_y_continuous(
+    limits = c(0, 1.6),
+    breaks = seq(0, 1.5, by = 0.25)
+  ) +
+
+  labs(
+    title    = "Mean RPI by IGBP Land Cover Class Across Zones",
+    subtitle = "Violin + boxplot shows pixel-level RPI distribution within each land cover class per zone",
+    x        = "IGBP Land Cover Class",
+    y        = "Mean RPI (2000–2023)",
+    caption  = "IGBP classification from MODIS MCD12Q1 (mode across 2001–2023). Dashed line = RPI of 1."
+  ) +
+
+  theme_rpi() +
+  theme(legend.position = "none")
+
+Fig4.4.IGBP.Profiles
 ```
 
 ```{r}
