@@ -3477,6 +3477,8 @@ Map.Elevation <- tm_shape(TsavoWest.Elevation) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+
+Map.Elevation
 ```
 
 ```{r}
@@ -3505,6 +3507,8 @@ Map.Slope <- tm_shape(TsavoWest.Slope) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+
+Map.Slope
 ```
 
 ```{r}
@@ -3534,6 +3538,8 @@ Map.TRI <- tm_shape(TsavoWest.TRI) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+
+Map.TRI
 ```
 
 ```{r}
@@ -3562,6 +3568,8 @@ Map.TWI <- tm_shape(TsavoWest.TWI) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+
+Map.TWI
 ```
 
 ```{r}
@@ -3592,6 +3600,8 @@ Map.DistToWater <- tm_shape(TsavoWest.DistToWater) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+
+Map.DistToWater
 ```
 
 ```{r}
@@ -3604,7 +3614,7 @@ Map.Hydro.Combined <- tm_shape(TsavoWest.TWI) +
       labels = c("Very Dry", "Dry", "Moist", "Wet", "Saturated")
     ),
     col_alpha  = 0.65,
-    col.legend = tm_legend(title = "TWI")
+    col.legend = tm_legend(title = "Wetness Score")
   ) +
   tm_shape(TsavoWest.Streams) +
   tm_raster(
@@ -3619,22 +3629,8 @@ Map.Hydro.Combined <- tm_shape(TsavoWest.TWI) +
   tm_layout(legend.outside = TRUE) +
   tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
                               "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
-```
 
-```{r}
-# Run maps individually first — static mode to avoid memory issues
-tmap_mode("plot")
-
-Map.Elevation
-Map.Slope
-Map.TRI
-Map.TWI
-Map.DistToWater
 Map.Hydro.Combined
-
-# Then switch to view mode for interactive exploration
-tmap_mode("view")
-Map.DistToWater   # most important map for expansion argument
 ```
 
 ```{r}
