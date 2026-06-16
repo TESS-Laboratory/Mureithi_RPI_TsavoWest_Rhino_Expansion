@@ -2980,6 +2980,13 @@ if (!file.exists(DEM.File.Path)) {
   
   cat("Downloading SRTM DEM for Tsavo West NP...\n")
   
+  # Create the directory if it doesn't exist yet
+  dir.create(
+    dirname(DEM.File.Path),
+    showWarnings = FALSE,
+    recursive    = TRUE   # creates all intermediate folders in one go
+  )
+  
   # Reproject TsavoWest to WGS84 for elevatr (requires lat/lon)
   TsavoWest.WGS84 <- st_transform(TsavoWest, 4326)
   
@@ -3011,7 +3018,7 @@ TsavoWest.Elevation <- project(TsavoWest.Elevation, crs(RPI))
 
 # Confirm metadata
 print(TsavoWest.Elevation)
-cat("Elevation range (m):", global(TsavoWest.Elevation, "range", na.rm = TRUE), "\n")
+cat("Elevation range (m):", global(TsavoWest.Elevation, "range", na.rm = TRUE)[[1]], "\n")
 ```
 
 ```{r}
@@ -3117,7 +3124,7 @@ if (!file.exists(DEM.Filled.Path)) {
 
 ```{r}
 # Step 4c: Specific Catchment Area (SCA) — D8 flow accumulation
-# SCA is required as input to TWI: TWI = ln(SCA / tan(slope))
+  # SCA is required as input to TWI: TWI = ln(SCA / tan(slope))
 if (!file.exists(SCA.Path)) {
   cat("Computing Specific Catchment Area...\n")
   wbt_d8_flow_accumulation(
@@ -3177,15 +3184,33 @@ names(TsavoWest.SCA) <- "SCA"
     # Threshold of 500 pixels = ~289 ha contributing area
       # Captures meaningful seasonal drainage lines (luggas) relevant to rhino water access
 
+# Reload SCA in its native CRS (before reprojection)
+TsavoWest.SCA.Native <- rast(SCA.Path)
+
+# Check what CRS the WBT output is in
+cat("Native SCA CRS:\n")
+print(crs(TsavoWest.SCA.Native, describe = TRUE))
+
+# Mask to Tsavo West — reproject the vector to match native CRS
+TsavoWest.Native.CRS  <- st_transform(TsavoWest, crs(TsavoWest.SCA.Native))
+TsavoWest.Native.Vect <- vect(TsavoWest.Native.CRS)
+
+TsavoWest.SCA.Native <- mask(TsavoWest.SCA.Native, TsavoWest.Native.Vect)
+
+# Check SCA value range before thresholding
+cat("SCA value range (native):\n")
+print(minmax(TsavoWest.SCA.Native))
+
+# Extract streams using native CRS
 Stream.Threshold <- 500
 
-TsavoWest.Streams <- TsavoWest.SCA > Stream.Threshold
-TsavoWest.Streams[TsavoWest.Streams == 0L] <- NA
-TsavoWest.Streams <- mask(TsavoWest.Streams, TsavoWest.Vect)
-names(TsavoWest.Streams) <- "Stream"
+TsavoWest.Streams.Native <- TsavoWest.SCA.Native > Stream.Threshold
+TsavoWest.Streams.Native[TsavoWest.Streams.Native == 0L] <- NA
+TsavoWest.Streams.Native <- mask(TsavoWest.Streams.Native, TsavoWest.Native.Vect)
+names(TsavoWest.Streams.Native) <- "Stream"
 
-cat("Stream pixels extracted:",
-    global(TsavoWest.Streams, "sum", na.rm = TRUE)[[1]], "\n")
+cat("Stream pixels (native CRS):",
+    global(TsavoWest.Streams.Native, "sum", na.rm = TRUE)[[1]], "\n")
 ```
 
 ```{r}
@@ -3193,25 +3218,45 @@ cat("Stream pixels extracted:",
   # The single most important habitat requirement for black rhinos that RPI does not capture — rhinos need water every 2–4 days
     # Computed as distance from each pixel to nearest stream pixel
 
-cat("Computing distance to nearest water source...\n")
-cat("(This may take several minutes for Tsavo West's extent)\n")
+# Compute gridDist in native CRS — distance in metres (native units)
+cat("Computing distance to nearest water source (native CRS)...\n")
 
-# Convert stream raster to points, then compute distance
-# gridDist() is memory-efficient for large rasters
-TsavoWest.DistToWater <- terra::gridDist(
-  TsavoWest.Streams,
-  target = 1      # distance to pixels with value = 1 (streams)
+TsavoWest.DistToWater.Native <- terra::gridDist(
+  TsavoWest.Streams.Native,
+  target = 1
 )
 
-# Convert from metres to kilometres
-TsavoWest.DistToWater <- TsavoWest.DistToWater / 1000
+# Check range before converting
+cat("Raw distance range (native units):\n")
+print(minmax(TsavoWest.DistToWater.Native))
+
+# Convert to km
+TsavoWest.DistToWater.Native <- TsavoWest.DistToWater.Native / 1000
+names(TsavoWest.DistToWater.Native) <- "Dist_to_Water_km"
+
+# NOW reproject to RPI CRS — safe because distance is continuous
+TsavoWest.DistToWater <- project(
+  TsavoWest.DistToWater.Native,
+  crs(RPI),
+  method = "bilinear"
+)
+
+# Reproject streams for mapping
+TsavoWest.Streams <- project(
+  TsavoWest.Streams.Native,
+  crs(RPI),
+  method = "near"    # nearest neighbour preserves binary values
+)
+TsavoWest.Streams <- mask(TsavoWest.Streams, TsavoWest.Vect)
+
+# Final mask and name
+TsavoWest.DistToWater <- mask(TsavoWest.DistToWater, TsavoWest.Vect)
 names(TsavoWest.DistToWater) <- "Dist_to_Water_km"
 
-# Mask to Tsavo West
-TsavoWest.DistToWater <- mask(TsavoWest.DistToWater, TsavoWest.Vect)
-
+# Confirm range — expect 0 to ~15–25 km for Tsavo West
 cat("Distance to water range (km):",
-    global(TsavoWest.DistToWater, "range", na.rm = TRUE), "\n")
+    minmax(TsavoWest.DistToWater)[1], "to",
+    minmax(TsavoWest.DistToWater)[2], "\n")
 ```
 
 ```{r}
@@ -3266,9 +3311,14 @@ Terrain.Pixel.Wide <- bind_rows(
   pivot_wider(
     id_cols     = c(ZONE, x, y),
     names_from  = Band,
-    values_from = Value
+    values_from = Value,
+    values_fn   = mean        
   ) |>
   mutate(x = round(x, 6), y = round(y, 6))
+
+# Verify columns are now atomic numeric — not lists
+cat("Terrain column classes:\n")
+sapply(Terrain.Pixel.Wide |> select(-ZONE, -x, -y), class)
 
 # Join to master cross-analysis table
 Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
