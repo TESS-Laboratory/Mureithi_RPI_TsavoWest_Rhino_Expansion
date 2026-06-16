@@ -2382,113 +2382,254 @@ Fig3.4.RPI.Spatial.Gap.Map
 # SECTION 4(A): Land Cover × RPI Cross-Analysis
   # Linking PMLv2/StudyPixels to RPI for habitat characterisation
     # Answering: WHY does the productivity gap exist?
+      # Point-sampling all variables at RPI pixel locations
+        # Eliminates coordinate mismatch from different raster grids
 ```
 
 ```{r}
-# Step 1: Collapse RPI pixels to mean per pixel
-  # Average across all 22 hydrological years per pixel
-    # This gives one representative RPI value per spatial location
+# Step 1: Get unique RPI pixel centroids as a SpatVector
+  # These become the master sampling locations for everything
 
-RPI.Pixel.Mean <- RPI.All.Zones.Pixels |>
-  group_by(ZONE, x, y) |>
-  summarise(
-    Mean.RPI    = mean(RPI,    na.rm = TRUE),
-    Median.RPI  = median(RPI,  na.rm = TRUE),
-    SD.RPI      = sd(RPI,      na.rm = TRUE),
-    CV.RPI      = sd(RPI, na.rm = TRUE) / mean(RPI, na.rm = TRUE), # Coefficient of variation
-    .groups     = "drop"
-  )
+RPI.Centroids <- RPI.Pixel.Mean |>
+  distinct(x, y)
 
-cat("Pixel-level mean RPI table dimensions:", dim(RPI.Pixel.Mean), "\n")
+RPI.Centroids.Vect <- vect(
+  RPI.Centroids,
+  geom = c("x", "y"),
+  crs  = crs(RPI)
+)
+
+cat("Total unique RPI pixel locations:", nrow(RPI.Centroids), "\n")
+
+# Quick sanity check — confirm points fall within Tsavo West
+cat("Points within Tsavo West extent: should be TRUE\n")
+print(relate(ext(RPI.Centroids.Vect), ext(vect(TsavoWest)), "intersects"))
 ```
 
 ```{r}
-# Step 2: Pivot cover pixels to wide format
-  # One row per pixel, one column per cover type
+# Step 2: Sample Cover raster AT RPI pixel locations
+  # terra::extract() for SpatVector points returns one row
+    # per point in the same order as input — safe to bind x,y back
+      # Note: raster stores 0-1 proportions → multiply by 100
 
-Cover.Pixel.Wide <- Cover.All.Zones.Pixels |>
-  pivot_wider(
-    id_cols     = c(ZONE, x, y),
-    names_from  = Band,
-    values_from = Value
-  ) |>
-  # Clean column names for easier referencing
-  rename(
-    Shrubland.Pct  = `Shrubland Cover (%)`,
-    Grassland.Pct  = `Grassland Cover (%)`,
-    Tree.Pct       = `Tree Cover (%)`,
-    Bare.Pct       = `Bare Ground (%)`,
-    Rangeland.Pct  = `All Rangelands (%)`
-  )
+cat("Sampling Cover raster at RPI pixel locations...\n")
 
-cat("Cover pixel wide table dimensions:", dim(Cover.Pixel.Wide), "\n")
-```
-
-```{r}
-# Step 3: Pivot PMLv2 pixels to wide format
-
-PMLv2.Pixel.Wide <- PMLv2.All.Zones.Pixels |>
-  pivot_wider(
-    id_cols     = c(ZONE, x, y),
-    names_from  = Band,
-    values_from = Value
+Cover.Sampled <- terra::extract(
+  StudyPixels.Continuous,     # 5-band raster: trees, shrubland, grassland, bare, allRangelands
+  RPI.Centroids.Vect
+) |>
+  as_tibble() |>
+  mutate(
+    x = RPI.Centroids$x,
+    y = RPI.Centroids$y
   ) |>
   rename(
-    GPP.Annual  = `GPP (gC/m²/yr)`,
-    Ec.Annual   = `Canopy Transpiration (mm)`,
-    Es.Annual   = `Soil Evaporation (mm)`,
-    Ei.Annual   = `Interception (mm)`
-  )
+    Tree.Pct      = trees,
+    Shrubland.Pct = shrubland,
+    Grassland.Pct = grassland,
+    Bare.Pct      = bare,
+    Rangeland.Pct = allRangelands
+  ) |>
+  # Raster stores 0-1 proportions — convert to %
+  mutate(across(
+    c(Tree.Pct, Shrubland.Pct, Grassland.Pct, Bare.Pct, Rangeland.Pct),
+    ~ . * 100
+  )) |>
+  select(-ID)
 
-cat("PMLv2 pixel wide table dimensions:", dim(PMLv2.Pixel.Wide), "\n")
+cat("Cover sampled — dimensions:", dim(Cover.Sampled), "\n")
+cat("Cover value range check (Shrubland %):",
+    round(range(Cover.Sampled$Shrubland.Pct, na.rm = TRUE), 1), "\n")
 ```
 
 ```{r}
-# Step 4: Build the master pixel-level cross-analysis table
-  # Join RPI mean + cover + PMLv2 by zone and pixel coordinates
-    # Note: round x/y to 6 decimal places before joining to avoid
-      # floating-point mismatch between extraction runs
+# Step 3: Sample PMLv2 raster AT RPI pixel locations
 
-RPI.Pixel.Mean <- RPI.Pixel.Mean |>
-  mutate(x = round(x, 6), y = round(y, 6))
+cat("Sampling PMLv2 raster at RPI pixel locations...\n")
 
-Cover.Pixel.Wide <- Cover.Pixel.Wide |>
-  mutate(x = round(x, 6), y = round(y, 6))
+PMLv2.Sampled <- terra::extract(
+  PMLv2.TsavoWest,     # 4-band raster: GPP, Ec, Es, Ei
+  RPI.Centroids.Vect
+) |>
+  as_tibble() |>
+  mutate(
+    x = RPI.Centroids$x,
+    y = RPI.Centroids$y
+  ) |>
+  rename(
+    GPP.Annual = GPP,
+    Ec.Annual  = Ec,
+    Es.Annual  = Es,
+    Ei.Annual  = Ei
+  ) |>
+  select(-ID)
 
-PMLv2.Pixel.Wide <- PMLv2.Pixel.Wide |>
-  mutate(x = round(x, 6), y = round(y, 6))
+cat("PMLv2 sampled — dimensions:", dim(PMLv2.Sampled), "\n")
+cat("GPP value range check (gC/m²/yr):",
+    round(range(PMLv2.Sampled$GPP.Annual, na.rm = TRUE), 1), "\n")
+```
+
+```{r}
+# Step 4: Sample IGBP raster AT RPI pixel locations
+  # Handles Fig 4.4 directly — no separate join step needed
+
+cat("Sampling IGBP raster at RPI pixel locations...\n")
+
+IGBP.Sampled <- terra::extract(
+  StudyPixels.TsavoWest[["igbp"]],
+  RPI.Centroids.Vect
+) |>
+  as_tibble() |>
+  mutate(
+    x = RPI.Centroids$x,
+    y = RPI.Centroids$y,
+    IGBP.Label = case_when(
+      igbp == 6  ~ "Closed\nShrubland",
+      igbp == 7  ~ "Open\nShrubland",
+      igbp == 8  ~ "Woody\nSavanna",
+      igbp == 9  ~ "Savanna",
+      igbp == 10 ~ "Grassland",
+      TRUE       ~ paste0("Class ", igbp)
+    )
+  ) |>
+  select(-ID, -igbp)
+
+cat("IGBP sampled — dimensions:", dim(IGBP.Sampled), "\n")
+cat("IGBP classes found:", unique(IGBP.Sampled$IGBP.Label), "\n")
+```
+
+```{r}
+# Step 5: Build master cross-analysis table
+  # All joins now use x, y from the same RPI centroid grid
+    # No coordinate mismatch possible
 
 Pixel.CrossAnalysis <- RPI.Pixel.Mean |>
-  left_join(Cover.Pixel.Wide, by = c("ZONE", "x", "y")) |>
-  left_join(PMLv2.Pixel.Wide, by = c("ZONE", "x", "y")) |>
+  left_join(Cover.Sampled,  by = c("x", "y")) |>
+  left_join(PMLv2.Sampled,  by = c("x", "y")) |>
+  left_join(IGBP.Sampled,   by = c("x", "y")) |>
   filter(
     !is.na(Shrubland.Pct),
     !is.na(GPP.Annual)
+  ) |>
+  mutate(
+    ZONE = fct_relevel(ZONE,
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)",
+      "Ngulia Sanctuary",
+      "Intensive Protection Zone"
+    )
   )
 
 cat("Master cross-analysis table dimensions:", dim(Pixel.CrossAnalysis), "\n")
+```
 
-# Quick check — confirm join worked across zones
+```{r}
+# Step 6: Verification — must show real numbers, not NA
+
 Pixel.CrossAnalysis |>
   group_by(ZONE) |>
   summarise(
-    N.Pixels      = n(),
-    Mean.RPI      = round(mean(Mean.RPI,       na.rm = TRUE), 3),
-    Mean.Shrub    = round(mean(Shrubland.Pct,  na.rm = TRUE), 1),
-    Mean.GPP      = round(mean(GPP.Annual,     na.rm = TRUE), 1)
+    N.Pixels    = n(),
+    Mean.RPI    = round(mean(Mean.RPI,      na.rm = TRUE), 3),
+    Mean.Shrub  = round(mean(Shrubland.Pct, na.rm = TRUE), 1),
+    Mean.Grass  = round(mean(Grassland.Pct, na.rm = TRUE), 1),
+    Mean.GPP    = round(mean(GPP.Annual,    na.rm = TRUE), 1),
+    IGBP.Classes = n_distinct(IGBP.Label, na.rm = TRUE),
+    .groups     = "drop"
   ) |>
   print()
 ```
 
 ```{r}
-# Step 5: Subsample for plotting
-  # Hexbin handles large N well but we cap per zone for balance
+# Step 7: Build Pixel.IGBP.RPI for Fig 4.4
+  # Directly from Pixel.CrossAnalysis
+Pixel.IGBP.RPI <- Pixel.CrossAnalysis |>
+  filter(
+    !is.na(IGBP.Label),
+    ZONE %in% c(
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)"
+    )
+  )
+
+cat("IGBP × RPI table:\n")
+Pixel.IGBP.RPI |>
+  group_by(ZONE, IGBP.Label) |>
+  summarise(
+    N        = n(),
+    Mean.RPI = round(mean(Mean.RPI, na.rm = TRUE), 3),
+    .groups  = "drop"
+  ) |>
+  print()
+```
+
+```{r}
+# Step 7 (Revised): Add shrubland intensity bins to Pixel.CrossAnalysis
+  # Replaces IGBP class comparison with ESA shrubland intensity
+
+
+Pixel.CrossAnalysis <- Pixel.CrossAnalysis |>
+  mutate(
+    Shrub.Class = case_when(
+      Shrubland.Pct < 25              ~ "Low Shrub\n(<25%)",
+      Shrubland.Pct >= 25 &
+        Shrubland.Pct < 50            ~ "Moderate Shrub\n(25–50%)",
+      Shrubland.Pct >= 50 &
+        Shrubland.Pct < 75            ~ "High Shrub\n(50–75%)",
+      Shrubland.Pct >= 75             ~ "Very High Shrub\n(≥75%)",
+      TRUE                            ~ NA_character_
+    ),
+    Shrub.Class = fct_relevel(
+      Shrub.Class,
+      "Low Shrub\n(<25%)",
+      "Moderate Shrub\n(25–50%)",
+      "High Shrub\n(50–75%)",
+      "Very High Shrub\n(≥75%)"
+    )
+  )
+
+# Rebuild the Fig 4.4 data object using shrubland bins
+Pixel.Shrub.RPI <- Pixel.CrossAnalysis |>
+  filter(
+    !is.na(Shrub.Class),
+    ZONE %in% c(
+      "Tsavo West NP",
+      "Tsavo West (excl. Rhino Range)",
+      "Rhino Range (Ngulia + IPZ)"
+    )
+  )
+
+# Verify bin counts per zone — confirms distribution is meaningful
+cat("Shrubland intensity bin counts per zone:\n")
+Pixel.Shrub.RPI |>
+  group_by(ZONE, Shrub.Class) |>
+  summarise(
+    N        = n(),
+    Mean.RPI = round(mean(Mean.RPI, na.rm = TRUE), 3),
+    .groups  = "drop"
+  ) |>
+  print()
+
+# Rebuild subsample to include the new Shrub.Class column
+set.seed(42)
+Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
+  group_by(ZONE) |>
+  slice_sample(n = 3000) |>
+  ungroup()
+```
+
+```{r}
+# Step 8: Subsample for plotting
 
 set.seed(42)
 Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
   group_by(ZONE) |>
   slice_sample(n = 3000) |>
   ungroup()
+
+cat("Sample dimensions:", dim(Pixel.CrossAnalysis.Sample), "\n")
 ```
 
 ```{r}
@@ -2725,71 +2866,36 @@ Fig4.3.Correlation.Heatmap
 ```
 
 ```{r}
-# FIGURE 4.4: IGBP Land Cover Class RPI Profiles
-  # Mean RPI broken down by IGBP class per zone
-    # Shows whether land cover class explains within-zone variation
+# FIGURE 4.4 (REVISED): RPI Distribution by Shrubland
+  # Intensity Class Across Zones
+    # Replaces IGBP single-class plot with ecologically meaningful
+      # shrubland cover gradient × zone comparison
 
-# Join IGBP class to pixel cross-analysis table
-IGBP.Pixel <- terra::extract(
-  StudyPixels.TsavoWest[["igbp"]],
-  vect(TsavoWest),
-  xy = TRUE
-) |>
-  as_tibble() |>
-  rename(IGBP.Class = igbp) |>
-  filter(!is.na(IGBP.Class)) |>
-  mutate(
-    x = round(x, 6),
-    y = round(y, 6),
-    IGBP.Label = case_when(
-      IGBP.Class == 6  ~ "Closed\nShrubland",
-      IGBP.Class == 7  ~ "Open\nShrubland",
-      IGBP.Class == 8  ~ "Woody\nSavanna",
-      IGBP.Class == 9  ~ "Savanna",
-      IGBP.Class == 10 ~ "Grassland",
-      TRUE             ~ paste0("Class ", IGBP.Class)
-    )
-  )
-
-# Join IGBP to pixel cross-analysis
-Pixel.IGBP.RPI <- Pixel.CrossAnalysis |>
-  mutate(x = round(x, 6), y = round(y, 6)) |>
-  left_join(
-    IGBP.Pixel |> select(x, y, IGBP.Label),
-    by = c("x", "y")
-  ) |>
-  filter(!is.na(IGBP.Label)) |>
-  filter(ZONE %in% c(
-    "Tsavo West NP",
-    "Tsavo West (excl. Rhino Range)",
-    "Rhino Range (Ngulia + IPZ)"
-  ))
-
-# IGBP colour palette
-IGBP.Colours <- c(
-  "Closed\nShrubland" = "#1a6b1a",
-  "Open\nShrubland"   = "#74c476",
-  "Woody\nSavanna"    = "#DAA520",
-  "Savanna"           = "#FFD700",
-  "Grassland"         = "#F0E68C"
+# Colour palette for shrubland intensity classes
+# Low → pale yellow, Very High → dark green
+Shrub.Class.Colours <- c(
+  "Low Shrub\n(<25%)"        = "#f7fcb9",
+  "Moderate Shrub\n(25–50%)" = "#addd8e",
+  "High Shrub\n(50–75%)"     = "#41ab5d",
+  "Very High Shrub\n(≥75%)"  = "#006d2c"
 )
 
-Fig4.4.IGBP.Profiles <- ggplot(
-  Pixel.IGBP.RPI,
-  aes(x = IGBP.Label, y = Mean.RPI, fill = IGBP.Label)
+Fig4.4.Shrub.Profiles <- ggplot(
+  Pixel.Shrub.RPI,
+  aes(x = Shrub.Class, y = Mean.RPI, fill = Shrub.Class)
 ) +
 
   geom_violin(
     alpha     = 0.4,
     linewidth = 0.4,
     trim      = TRUE,
-    scale     = "width"
+    scale     = "width"   # all violins same width regardless of N
   ) +
 
   geom_boxplot(
     width         = 0.2,
     alpha         = 0.8,
-    linewidth     = 0.4,
+    linewidth     = 0.45,
     outlier.shape = NA
   ) +
 
@@ -2797,12 +2903,13 @@ Fig4.4.IGBP.Profiles <- ggplot(
     fun      = median,
     geom     = "point",
     shape    = 21,
-    size     = 2,
+    size     = 2.2,
     fill     = "white",
     colour   = "black",
     stroke   = 0.7
   ) +
 
+  # Reference line at RPI = 1
   geom_hline(
     yintercept = 1,
     linetype   = "dashed",
@@ -2810,27 +2917,50 @@ Fig4.4.IGBP.Profiles <- ggplot(
     linewidth  = 0.5
   ) +
 
+  # Annotate pixel counts per bin per zone
+  stat_summary(
+    aes(label = after_stat(paste0("n=", scales::comma(y)))),
+    fun       = function(x) quantile(x, 0.95),
+    geom      = "text",
+    size      = 2.4,
+    colour    = "grey40",
+    vjust     = -0.3,
+    fun.args  = list()
+  ) +
+
   facet_wrap(~ ZONE, ncol = 3) +
 
-  scale_fill_manual(values = IGBP.Colours) +
+  scale_fill_manual(values = Shrub.Class.Colours) +
 
   scale_y_continuous(
     limits = c(0, 1.6),
     breaks = seq(0, 1.5, by = 0.25)
   ) +
 
+  scale_x_discrete(
+    labels = function(x) stringr::str_wrap(x, width = 14)
+  ) +
+
   labs(
-    title    = "Mean RPI by IGBP Land Cover Class Across Zones",
-    subtitle = "Violin + boxplot shows pixel-level RPI distribution within each land cover class per zone",
-    x        = "IGBP Land Cover Class",
+    title    = "Mean RPI by Shrubland Cover Intensity Class Across Zones",
+    subtitle = "Violin + boxplot shows pixel-level RPI distribution within each shrubland intensity class per zone.\nWhite point = median. Dashed line = RPI of 1 (actual GPP = potential GPP).",
+    x        = "Shrubland Cover Intensity Class (ESA WorldCover)",
     y        = "Mean RPI (2000–2023)",
-    caption  = "IGBP classification from MODIS MCD12Q1 (mode across 2001–2023). Dashed line = RPI of 1."
+    caption  = paste0(
+      "Shrubland cover (%) from ESA WorldCover 2020 resampled to 500m. ",
+      "Bins defined by ecologically meaningful shrub cover thresholds.\n",
+      "MODIS IGBP classification not used here due to coarse savanna-grassland ",
+      "class conflation at 500m resolution."
+    )
   ) +
 
   theme_rpi() +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none",
+    axis.text.x     = element_text(size = 8)
+  )
 
-Fig4.4.IGBP.Profiles
+Fig4.4.Shrub.Profiles
 ```
 
 ```{r}
