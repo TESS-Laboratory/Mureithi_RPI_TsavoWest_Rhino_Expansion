@@ -17,20 +17,24 @@ The analysis uses libraries including sf, terra, tidyverse, tmap, trend, and sli
 
 **Data Description**
 1. RPI Datasets
+   
 • actual_gpp_ea_v2.tif: Integrated annual GPP estimates for 22 hydrological years (2000–2023).
 • potential_gpp_ea_v2.tif: Estimated potential GPP based on quantile regression forest modeling.
 • rpi_ea_v2.tif: The Relative Productivity Index values (Ratio of Actual/Potential GPP).
 • rpi_ea_temporal_performance.tif: Pixel-level quality control layers (MAE, RMSE, R^2).
 
 2. Mechanistic Context (PML_V2) - used to characterise the eco-hydrological drivers of habitat quality
+   
 • Productivity and water flux layers including Canopy Transpiration (E_c).
 • Soil Evaporation (E_s).
 • Interception (E_i).
 
-4. Habitat Characterisation (Study Pixels)
-• Land cover classification (IGBP) and fractional cover percentages (Trees, Shrub, Grass, Bare Ground) used to define the vegetation structure underlying RPI patterns.
+3. Habitat Characterisation (Study Pixels)
+   
+• Land cover classification (IGBP - MODIS) and fractional cover percentages (Trees, Shrub, Grass, Bare Ground - ESA) used to define the vegetation structure underlying RPI patterns.
 
-5. Terrain & Hydrology
+4. Terrain & Hydrology
+   
 • SRTM Digital Elevation Model (~76m resolution) used to define the baseline elevation profile across the 9,065 $\text{km}^2$ expansion area.
 • Slope (Slope_deg), Directional Aspect (Aspect_Class), and Terrain Ruggedness Index (TRI) - used to model large mammal movement costs and solar/moisture dynamics.
 •Topographic Wetness Index (TWI) & SCA - hydro-enforced layers mapping steady-state soil moisture distribution and upslope water accumulation paths across the landscape.
