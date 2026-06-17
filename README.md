@@ -42,13 +42,13 @@ The analysis uses libraries including sf, terra, tidyverse, tmap, trend, and sli
 
 4. Terrain & Hydrology
    
-• SRTM Digital Elevation Model (~76m resolution) used to define the baseline elevation profile across the 9,065 $\text{km}^2$ expansion area.
+• SRTM Digital Elevation Model: (~76m resolution) used to define the baseline elevation profile across the 9,065 $\text{km}^2$ expansion area.
 
-• Slope (Slope_deg), Directional Aspect (Aspect_Class), and Terrain Ruggedness Index (TRI) - used to model large mammal movement costs and solar/moisture dynamics.
+• Slope (Slope_deg), Directional Aspect (Aspect_Class), and Terrain Ruggedness Index (TRI): used to model large mammal movement costs and solar/moisture dynamics.
 
-•Topographic Wetness Index (TWI) & SCA - hydro-enforced layers mapping steady-state soil moisture distribution and upslope water accumulation paths across the landscape.
+•Topographic Wetness Index (TWI) & SCA: hydro-enforced layers mapping steady-state soil moisture distribution and upslope water accumulation paths across the landscape.
 
-•Water Proximity (Stream & Dist_to_Water_km) - a binary seasonal drainage network (mapping crucial ephemeral luggas) paired with a continuous distance matrix tracking exact kilometer proximity to the nearest water security line—a primary driver for black rhino ranging patterns.
+•Water Proximity (Stream & Dist_to_Water_km): a binary seasonal drainage network (mapping crucial ephemeral luggas) paired with a continuous distance matrix tracking exact kilometer proximity to the nearest water security line—a primary driver for black rhino ranging patterns.
 
 **Data Provenance**
 The reproducible code is available on GitHub under a [e.g., MIT or GNU GPL V3] license. National Park and Sanctuary boundaries were sourced from [Source, e.g., KWS/WDPA]. The RPI datasets are attributed to Guy Lomax (University of Exeter/TESS Lab).
