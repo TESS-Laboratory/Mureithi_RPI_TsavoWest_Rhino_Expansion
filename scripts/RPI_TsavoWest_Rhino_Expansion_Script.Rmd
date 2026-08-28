@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r}
-# Load libraries 
+# Load libraries
 
 # The {"if (require("pacman")) install.packages("pacman")"} - for loading and installing packages in a single command -> only need to do this once
 
