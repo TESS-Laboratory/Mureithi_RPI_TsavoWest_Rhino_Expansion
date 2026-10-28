@@ -1,26 +1,18 @@
----
-title: "RPI_TsavoWest_Rhino_Expansion_Script"
-author: "Isaac Nduta Mureithi"
-date: "2026-02-04"
-output: html_document
----
-
 ```{r}
 # Load libraries
 
-# The {"if (require("pacman")) install.packages("pacman")"} - for loading and installing packages in a single command -> only need to do this once
-
+# pacman::p_load() installs any missing package and then loads it, in one command
 if (!require("pacman")) install.packages("pacman")
 
-pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, tmap, trend, slider, forcats, viridis, viridisLite, scales, hexbin, ggh4x, scico, ggridges, truncnorm, zoo, cowplot, ggplotify, png, magick, ggtext, grid, elevatr, whitebox)
+pacman::p_load(sf, terra, tidyverse, tidyterra, forcats, tmap, trend, slider, viridis, scales, hexbin, scico, grid, elevatr, whitebox, here, rgbif, ranger)
 
 # DATA HANDLING#
 # tidyverse -> for data manipulation, cleaning, and visualisation in a cohesive framework
-# forcats -> for managing factors (categorical variables)
-# slider -> for rolling or sliding window calculations
-# zoo -> for working with ordered observations, especially time-series data, with irregular time steps
-# elevatr   → for downloading SRTM DEM tiles automatically
-# whitebox  → R bindings for WhiteboxTools hydrological processing
+# forcats   -> for managing factors (categorical variables)
+# slider    -> for rolling or sliding window calculations
+# elevatr   -> for downloading SRTM DEM tiles automatically
+# whitebox  -> R bindings for WhiteboxTools hydrological processing
+# here      -> for project-relative file paths (root = the folder holding the .Rproj file)
 
 # SPATIAL DATA & MAPPING#
 # sf -> for handling vector spatial data (points, lines, polygons)
@@ -30,24 +22,25 @@ pacman::p_load(sf, terra, tidyverse, tidyterra, colorspace, ggrepel, patchwork, 
 
 # VISUALISATION#
 # viridis -> for perceptually uniform color palettes
-# viridisLite -> same use as above though I shall use this for R^2 (Temporal Performance raster)
 # scales -> for controlling plot scale formatting (e.g., number and date labels)
-# hexbin -> for visualizing point density with hexagonal bins
-# ggh4x -> for advanced ggplot2 features = facetted_pos_scales
+# hexbin -> for visualizing point density with hexagonal bins (geom_hex)
 # scico -> for scientific color maps
-# colorspace -> for a wide variety of perceptually uniform color palettes
-# ggrepel -> for preventing text labels from overlapping
-# patchwork -> for combining multiple plots into one figure
-# ggridges -> for creating ridge plots (joy plots)
-# truncnorm -> for generating random numbers from a truncated normal distribution
-# cowplot -> for arranging multiple ggplot objects and converting other plot types into ggplot-compatible objects 
-# ggplotify -> for converting non-ggplot objects (like base R plots or tmap grobs) into ggplot objects
-# png -> for basic reading and writing of PNG files into raw pixel arrays
-# magick -> for professional-grade image processing, editing, and format conversion
-# ggtext → enhanced text rendering in ggplot2 using Markdown/HTML (e.g., bold, italics, styled labels)
+# grid -> for unit() in plot themes
 
 # STATISTICAL ANALYSIS#
-#trend -> for analysing trends in time-series data = Theil-Sen slope
+# trend -> for analysing trends in time-series data = Theil-Sen slope
+
+# HABITAT SUITABILITY MODELLING (Section 5)#
+# rgbif  -> for downloading species occurrence records from GBIF
+# ranger -> for fast random forests (probability forests used as the HSM engine)
+```
+
+```{r}
+# Project paths -> relative to the .Rproj root, so the script runs on any machine
+# (RPI, PMLv2 and StudyPixels rasters below live on OneDrive and keep their own absolute paths)
+Dir.Project <- here::here()
+Dir.Data    <- file.path(Dir.Project, "data")
+Data.Path   <- function(...) file.path(Dir.Data, ...)
 ```
 
 ```{r}
@@ -58,10 +51,6 @@ wbt_init()
 ```{r}
 # Importing RPI Datasets - Rasters (TIFs)
 
-Actual.GPP <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/actual_gpp_ea_v2.tif")
-
-Potential.GPP <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/potential_gpp_ea_v2.tif")
-
 RPI <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/rpi_ea_v2.tif")
 
 Temporal.Performance <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CLASSES - MSc/BIOM4009 ResearchProject/DATA/Geospatial Data/R Use/2.Kenya-s-Rangelands-Protected-Areas_files/RPI Datasets (GuyLomax)/rpi_ea_temporal_performance.tif")
@@ -69,12 +58,15 @@ Temporal.Performance <- rast("C:/Users/IsaacM/OneDrive - University of Exeter/CL
 
 ```{r}
 tmap_mode("view")
+
+# Basemaps offered in every interactive map
+Basemaps <- c("Esri.WorldImagery", "OpenStreetMap", "Esri.WorldGrayCanvas", "Esri.WorldTopoMap")
 ```
 
 ```{r}
 # Africa Country Boundary import
 
-Africa.Country.Boundaries <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/africa_country_boundaries_simplified_wgs84.shp")
+Africa.Country.Boundaries <- st_read(Data.Path("Country_Borders", "africa_country_boundaries_simplified_wgs84.shp"))
 ```
 
 ```{r}
@@ -90,19 +82,14 @@ tm_shape(Africa.Country.Boundaries) +
   ) +
   tm_title("Africa Country Boundaries") +
   tm_view(
-    basemap.server = c(
-      "Esri.WorldImagery",
-      "OpenStreetMap",
-      "Esri.WorldGrayCanvas",
-      "Esri.WorldTopoMap"
-    )
+    basemap.server = Basemaps
   )
 ```
 
 ```{r}
 #Focusing on Kenya
 
-Kenya.Admin.Boundary <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/kenya_admin_boundary_wgs84.shp")
+Kenya.Admin.Boundary <- st_read(Data.Path("Country_Borders", "kenya_admin_boundary_wgs84.shp"))
 ```
 
 ```{r}
@@ -117,19 +104,14 @@ tm_shape(Kenya.Admin.Boundary) +
   ) +
   tm_title("Kenya's Administrative Boundary") +
   tm_view(
-    basemap.server = c(
-      "Esri.WorldImagery",
-      "OpenStreetMap",
-      "Esri.WorldGrayCanvas",
-      "Esri.WorldTopoMap"
-    )
+    basemap.server = Basemaps
   )
 ```
 
 ```{r}
 # Focusing on Kenya's Terrestrial Protected Areas
 
-Kenya.Terrestrial.PAs <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/Country_Borders/kenya_terrestrial_protected_areas_wgs84.shp")
+Kenya.Terrestrial.PAs <- st_read(Data.Path("Country_Borders", "kenya_terrestrial_protected_areas_wgs84.shp"))
 ```
 
 ```{r}
@@ -155,19 +137,14 @@ tm_shape(Kenya.Terrestrial.PAs) +
   tm_title("Kenya Terrestrial Protected Areas") +
   
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
 ```{r}
 # Importing Tsavo West National Park Boundary
 
-TsavoWest <- st_read("C:/Workspace/Mureithi_RPI_Conservation_Governance/data/WDPA_Amboseli_Tsavo/National Parks&Reserves/TsavoWest-WDPA_WDOECM_Apr2025_Public_19564_shp/WDPA_WDOECM_Apr2025_Public_19564_shp_0/WDPA_WDOECM_Apr2025_Public_19564_shp-polygons.shp")
+TsavoWest <- st_read(Data.Path("WDPA_Amboseli_Tsavo", "National Parks&Reserves", "TsavoWest-WDPA_WDOECM_Apr2025_Public_19564_shp", "WDPA_WDOECM_Apr2025_Public_19564_shp_0", "WDPA_WDOECM_Apr2025_Public_19564_shp-polygons.shp"))
 ```
 
 ```{r}
@@ -182,21 +159,16 @@ tm_shape(TsavoWest) +
   ) +
   tm_title("Tsavo West National Park") +
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
 ```{r}
 # Importing Rhino Expansion Area Boundary
 
-NguliaSanctuary <- st_read("C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/TsavoWest_Rhino_Zones/Ngulio_Sanctuary.shp")
+NguliaSanctuary <- st_read(Data.Path("TsavoWest_Rhino_Zones", "Ngulio_Sanctuary.shp"))
 
-TsavoWestIPZ <- st_read("C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/TsavoWest_Rhino_Zones/Tsavo_West_Intensive_Protection_Zone.shp")
+TsavoWestIPZ <- st_read(Data.Path("TsavoWest_Rhino_Zones", "Tsavo_West_Intensive_Protection_Zone.shp"))
 ```
 
 ```{r}
@@ -207,24 +179,7 @@ names(TsavoWestIPZ)
 ```
 
 ```{r}
-# Interactive Ngulia Sanctuary
-tm_shape(NguliaSanctuary) + 
-  tm_polygons( fill = "orange", 
-               col = "black", 
-               lwd = 2, 
-               fill_alpha = 0.2, 
-               id = "Id" ) +
-  tm_title("Ngulia Sanctuary - Rhino Expansion Area") +
-  tm_view( basemap.server = c( "Esri.WorldImagery", 
-                         "OpenStreetMap", 
-                         "Esri.WorldGrayCanvas", 
-                         "Esri.WorldTopoMap" ) 
-           )
-```
-
-```{r}
 # Interactive Ngulia Sanctuary (with Tsavo West NP Boundary)
-tmap_mode("view")
 
 tm_shape(TsavoWest) +
   tm_polygons(
@@ -245,29 +200,8 @@ tm_shape(NguliaSanctuary) +
   ) +
   tm_title("Ngulia Sanctuary - Rhino Expansion Area within Tsavo West NP") +
 tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
-```
-
-```{r}
-# Interactive Tsavo West Intensive Protection Zone
-tm_shape(TsavoWestIPZ) + 
-  tm_polygons( fill = "orange", 
-               col = "black", 
-               lwd = 2, 
-               fill_alpha = 0.2, 
-               id = "Id" ) + 
-  tm_title("Tsavo West Intensive Protection Zone") +
-  tm_view( basemap.server = c( "Esri.WorldImagery", 
-                         "OpenStreetMap", 
-                         "Esri.WorldGrayCanvas", 
-                         "Esri.WorldTopoMap" ) 
-           )
 ```
 
 ```{r}
@@ -291,12 +225,7 @@ tm_shape(TsavoWestIPZ) +
   ) +
   tm_title("Tsavo West Intensive Protection Zone within Tsavo West NP") +
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
@@ -344,24 +273,24 @@ TsavoWest.Rhino.Range <- st_transform(TsavoWest.Rhino.Range, RPI_CRS)
 ```
 
 ```{r}
-# Interactive Tsavo West Rhino Range (Ngulia Sanctuary + IPZ) 
-tm_shape(TsavoWest.Rhino.Range) +
+# Shared map overlay: Tsavo West NP outline + Rhino Range (Ngulia + IPZ)
+# Appended with + to the Kenya-wide and PMLv2 / StudyPixels maps below
+TW.Overlay <- tm_shape(TsavoWest) +
   tm_polygons(
-    fill = "orange",
-    col = "black",
-    lwd = 2,
-    fill_alpha = 0.2,
-    id = "Id"
+    fill       = "white",   # fill_alpha = 0: outline only
+    fill_alpha = 0,
+    col        = "black",
+    lwd        = 2,
+    id         = "NAME"
   ) +
-  tm_title("Tsavo West Rhino Range (Ngulia Sanctuary + Intensive Protection Zone)") +
-  tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
+  tm_shape(TsavoWest.Rhino.Range) +
+  tm_polygons(
+    fill       = "orange",
+    fill_alpha = 0.2,
+    col        = "darkred",
+    lwd        = 1.5,
+    id         = "NAME"
   )
-)
 ```
 
 ```{r}
@@ -385,18 +314,11 @@ tm_shape(TsavoWest.Rhino.Range) +
   ) +
   tm_title("Tsavo West Rhino Range (Ngulia Sanctuary + Intensive Protection Zone) within Tsavo West NP") +
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
-```{r}
-# Visualising RPI for each Area
-```
+### Visualising RPI for each Area
 
 ```{r}
 ## Visualising Tsavo West NP - RPI 
@@ -407,7 +329,6 @@ TsavoWest.RPI.Crop <- crop(TsavoWest.RPI.Mask, TsavoWest)
 TsavoWest.RPI.Mean <- mean(TsavoWest.RPI.Crop, na.rm = TRUE)
 
 # Plotting
-tmap_mode("view")
 tm_shape(TsavoWest.RPI.Mean) +
   
   tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
@@ -422,12 +343,7 @@ tm_shape(TsavoWest.RPI.Mean) +
   tm_layout(legend.outside = TRUE) +
   
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
@@ -440,7 +356,6 @@ NguliaSanctuary.RPI.Crop <- crop(NguliaSanctuary.RPI.Mask, NguliaSanctuary)
 NguliaSanctuary.RPI.Mean <- mean(NguliaSanctuary.RPI.Crop, na.rm = TRUE)
 
 # Visualise
-tmap_mode("view")
 tm_shape(NguliaSanctuary.RPI.Mean) +
   
   tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
@@ -455,12 +370,7 @@ tm_shape(NguliaSanctuary.RPI.Mean) +
   tm_layout(legend.outside = TRUE) +
   
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
@@ -473,7 +383,6 @@ TsavoWestIPZ.RPI.Crop <- crop(TsavoWestIPZ.RPI.Mask, TsavoWestIPZ)
 TsavoWestIPZ.RPI.Mean <- mean(TsavoWestIPZ.RPI.Crop, na.rm = TRUE)
 
 # Visualise
-tmap_mode("view")
 tm_shape(TsavoWestIPZ.RPI.Mean) +
   
   tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
@@ -488,12 +397,7 @@ tm_shape(TsavoWestIPZ.RPI.Mean) +
   tm_layout(legend.outside = TRUE) +
   
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
@@ -506,7 +410,6 @@ TsavoWest.Rhino.Range.RPI.Crop <- crop(TsavoWest.Rhino.Range.RPI.Mask, TsavoWest
 TsavoWest.Rhino.Range.RPI.Mean <- mean(TsavoWest.Rhino.Range.RPI.Crop, na.rm = TRUE)
 
 # Visualise
-tmap_mode("view")
 tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
   
   tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
@@ -521,18 +424,11 @@ tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
   tm_layout(legend.outside = TRUE) +
   
   tm_view(
-  basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  )
+  basemap.server = Basemaps
 )
 ```
 
-```{r}
-# Preliminary Section: Temporal Performance Overview
-```
+### Preliminary Section: Temporal Performance Overview
 
 ```{r}
 ## Clipping Temporal Performance to Kenya Admin Boundary
@@ -562,29 +458,10 @@ Map.MAE <- tm_shape(Temporal.Performance.Kenya[["mae"]]) +
 ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Mean Absolute Error") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 2. RMSE
@@ -596,29 +473,10 @@ Map.RMSE <- tm_shape(Temporal.Performance.Kenya[["rmse"]]) +
   ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Root Mean Squared Error") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 3. R²
@@ -630,29 +488,10 @@ Map.Rsqd <- tm_shape(Temporal.Performance.Kenya[["rsq"]]) +
   ) +
   tm_shape(Kenya.Admin.Boundary) +
   tm_borders(col = "black", lwd = 0.5) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title(expression(R^2)) +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # Arrange side by side
@@ -674,9 +513,7 @@ print(PMLv2.Kenya)
 print(StudyPixelsKenya)
 ```
 
-```{r}
-# Mapping the PMLv2 & StudyPixelKenya
-```
+### Mapping the PMLv2 & StudyPixelKenya
 
 ```{r}
 # Map 1 -> PMLv2 (Productivity & Energy Fluxes)
@@ -688,27 +525,9 @@ PMLv2.GPP.Map <- tm_shape(PMLv2.Kenya[["GPP"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "GPP (Gross Primary Productivity)")
   ) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Gross Primary Productivity") +
-  tm_view(basemap.server = c("Esri.WorldImagery", 
-                             "OpenStreetMap", 
-                             "Esri.WorldGrayCanvas", 
-                             "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 # 2. Ec (Canopy Transpiration)
 PMLv2.EC.Map <- tm_shape(PMLv2.Kenya[["Ec"]]) +
@@ -717,28 +536,9 @@ PMLv2.EC.Map <- tm_shape(PMLv2.Kenya[["Ec"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "Ec (Canopy Transpiration)")
   ) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Canopy Transpiration") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 # 3. Es (Soil Evaporation)
 PMLv2.ES.Map <- tm_shape(PMLv2.Kenya[["Es"]]) +
@@ -747,28 +547,9 @@ PMLv2.ES.Map <- tm_shape(PMLv2.Kenya[["Es"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "Es (Soil Evaporation)")
   ) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Soil Evaporation") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 # 4. Ei (Interception)
 PMLv2.EI.Map <- tm_shape(PMLv2.Kenya[["Ei"]]) +
@@ -777,28 +558,9 @@ PMLv2.EI.Map <- tm_shape(PMLv2.Kenya[["Ei"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "Ei (Interception)")
   ) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Interception") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 # Arrange in a 2x2 panel
 tmap_arrange(PMLv2.GPP.Map, PMLv2.EC.Map, PMLv2.ES.Map, PMLv2.EI.Map, ncol = 2)
@@ -819,28 +581,9 @@ StudyPixelsKenya.IGBP.Map <- tm_shape(StudyPixelsKenya[["igbp"]]) +
     col_alpha = 0.8,
     col.legend = tm_legend(title = "MODIS Land Cover")
   ) +
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("IGBP – Land Cover Classes") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
   )
 
 # 2: Trees (% cover)
@@ -848,28 +591,9 @@ StudyPixelsKenya.Trees.Map <- tm_shape(StudyPixelsKenya[["trees"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.greens", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Tree Cover (%)")) + 
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Tree Cover") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 3: Shrubland (% cover)
@@ -877,28 +601,9 @@ StudyPixelsKenya.Shrub.Map <- tm_shape(StudyPixelsKenya[["shrubland"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.yl_gn", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Shrubland Cover (%)")) + 
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Shrubland Cover") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 4: Grassland (% cover)
@@ -906,28 +611,9 @@ StudyPixelsKenya.Grass.Map <- tm_shape(StudyPixelsKenya[["grassland"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.yl_or_br", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Grassland Cover (%)")) + 
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Grassland Cover") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 5: Bare Ground (% cover)
@@ -935,28 +621,9 @@ StudyPixelsKenya.BareGround.Map <- tm_shape(StudyPixelsKenya[["bare"]]) +
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.greys", style = "pretty", n = 7, value.na = NA),
     col.legend = tm_legend(title = "Bare Ground (%)")) + 
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("Bare Ground") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
 # 6: All Rangelands (% cover)
@@ -964,31 +631,11 @@ StudyPixelsKenya.Rangelands.Map <- tm_shape(StudyPixelsKenya[["allRangelands"]])
   tm_raster(
     col.scale = tm_scale_intervals(values = "brewer.spectral", style = "pretty", n = 7,value.na = NA),
     col.legend = tm_legend(title = "All Rangelands (%)")) + 
-  tm_shape(TsavoWest) +
-  tm_polygons(
-    fill = "white",      # Using a dummy color with 0 alpha for transparency
-    fill_alpha = 0, 
-    col = "black", 
-    lwd = 2, 
-    id = "NAME"
-  ) +
-  tm_shape(TsavoWest.Rhino.Range) +
-  tm_polygons(
-    fill = "orange", 
-    fill_alpha = 0.2, 
-    col = "darkred", 
-    lwd = 1.5, 
-    id = "NAME"
-  ) +
+  TW.Overlay +
   tm_title("All Rangelands") +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap")
+  tm_view(basemap.server = Basemaps
     )
 
-tmap_mode("view")
 tmap_arrange(StudyPixelsKenya.IGBP.Map, 
              StudyPixelsKenya.Trees.Map, 
              StudyPixelsKenya.Shrub.Map, 
@@ -998,153 +645,10 @@ tmap_arrange(StudyPixelsKenya.IGBP.Map,
              ncol = 2)
 ```
 
-```{r}
-# General Reference and Administrative Maps Save before moving to Zone-level RPI summaries
+## SECTION 1: Zone-Level RPI Summaries
 
-#library(tmap)
-
-# Set mode to plot for high-quality static export
-#tmap_mode("plot")
-
-# 1. Kenya Terrestrial Protected Areas
-#Kenya.ProtectedAreas.Map <- tm_shape(Kenya.Admin.Boundary) +
-#  tm_polygons(
-#    fill = "lightgrey",
-#    col = "black",
-#    lwd = 1,
-#    fill_alpha = 0.3,
-#    id = "ADM0_EN"
-#  ) +
-#  tm_shape(Kenya.Terrestrial.PAs) +
-#  tm_polygons(
-#    fill = "darkgreen",
-#    col = "black",
-#    lwd = 1,
-#    fill_alpha = 0.3,
-#    id = "NAME"
-#  ) +
-#  tm_title("Kenya Terrestrial Protected Areas")
-
-#tmap_save(Kenya.ProtectedAreas.Map, 
-#          "Kenya_Terrestrial_Protected_Areas.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 11.69)
-
-# 2. Tsavo West Rhino Range Overview
-#TsavoWest.Rhino.Range.Map <- tm_shape(TsavoWest) +
-#  tm_polygons(
-#    fill = NA,          
-#    col = "black",
-#    lwd = 3, 
-#    fill_alpha = 0,
-#    id = "NAME"
-#  ) +
-#  tm_shape(TsavoWest.Rhino.Range) +
-#  tm_polygons(
-#    fill = "orange",
-#    col = "black",
-#    lwd = 2,
-#    fill_alpha = 0.2,
-#    id = "Id"
-#  ) +
-#  tm_title("Tsavo West Rhino Range (Ngulia Sanctuary + IPZ) within Tsavo West NP")
-
-#tmap_save(TsavoWest.Rhino.Range.Map, 
-#          "Tsavo_West_Rhino_Range_Overview.png", 
-#          dpi = 600, 
-#          width = 11.69, 
-#          height = 8.27)
-
-# 3. Ngulia Sanctuary - RPI
-#NguliaSanctuary.RPI.Map <- tm_shape(NguliaSanctuary.RPI.Mean) +
-#  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
-#            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
-#  tm_shape(NguliaSanctuary) +
-#  tm_borders(col = "white", lwd = 2) +
-#  tm_title("Spatial Distribution of Mean RPI in Ngulia Sanctuary") +
-#  tm_layout(legend.outside = TRUE)
-
-#tmap_save(NguliaSanctuary.RPI.Map, 
-#          "Ngulia_Sanctuary_Mean_RPI.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 8.27)
-
-# 4. Tsavo West IPZ - RPI
-#TsavoWest.IPZ.RPI.Map <- tm_shape(TsavoWestIPZ.RPI.Mean) +
-#  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
-#            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
-#  tm_shape(TsavoWestIPZ) +
-#  tm_borders(col = "white", lwd = 2) +
-#  tm_title("Spatial Distribution of Mean RPI in Tsavo West's Intensive Protection Zone") #+
-#  tm_layout(legend.outside = TRUE)
-
-#tmap_save(TsavoWest.IPZ.RPI.Map, 
-#          "Tsavo_West_IPZ_Mean_RPI.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 8.27)
-
-# 5. Tsavo West Rhino Range - RPI
-#TsavoWest.Rhino.Range.RPI.Map <- tm_shape(TsavoWest.Rhino.Range.RPI.Mean) +
-#  tm_raster(col.scale = tm_scale_continuous(values = "viridis"), 
-#            col.legend = tm_legend(title = "Mean RPI", reverse = TRUE)) +
-#  tm_shape(TsavoWest) +
-#  tm_borders(col = "white", lwd = 2) +
-#  tm_title("Spatial Distribution of Mean RPI in Tsavo West Rhino Range") +
-#  tm_layout(legend.outside = TRUE)
-
-#tmap_save(TsavoWest.Rhino.Range.RPI.Map, 
-#          "Tsavo_West_Rhino_Range_Mean_RPI.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 8.27)
-
-# 6. Temporal Performance Metrics (3-Panel)
-#Temporal.Performance.Map <- tmap_arrange(Map.MAE, 
-#                                         Map.RMSE, 
-#                                         Map.Rsqd, 
-#                                        ncol = 3)
-#tmap_save(Temporal.Performance.Map, 
-#          "Kenya_Temporal_Performance_Metrics.png", 
-#          dpi = 600, 
-#          width = 11.69, 
-#          height = 8.27)
-
-# 7. PMLv2 Productivity & Energy Fluxes (4-Panel)
-#PMLv2.Panel.Map <- tmap_arrange(PMLv2.GPP.Map, 
-#                                PMLv2.EC.Map, 
-#                                PMLv2.ES.Map, 
-#                                PMLv2.EI.Map, 
-#                                ncol = 2)
-#tmap_save(PMLv2.Panel.Map, 
-#          "PMLv2_Kenya_Fluxes_Panel.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 11.69)
-
-# 8. Study Pixels Land Cover Classes (6-Panel)
-#LandCover.Panel.Map <- tmap_arrange(StudyPixelsKenya.IGBP.Map, 
-#                                    StudyPixelsKenya.Trees.Map,
-#                                    StudyPixelsKenya.Shrub.Map,
-#                                    StudyPixelsKenya.Grass.Map,
-#                                    StudyPixelsKenya.BareGround.Map,
-#                                    StudyPixelsKenya.Rangelands.Map,
-#                                    ncol = 2)
-
-#tmap_save(LandCover.Panel.Map, 
-#          "Kenya_Land_Cover_Vegetation_Panel.png", 
-#          dpi = 600, 
-#          width = 8.27, 
-#          height = 11.69)
-```
-
-```{r}
-# SECTION 1: Zone-Level RPI Summaries
-# Extracting pixel values per zone into data frames
-# for statistical comparison
-```
+Extracting pixel values per zone into data frames  
+for statistical comparison
 
 ```{r}
 # Name RPI layers by Hydrological Year
@@ -1291,13 +795,13 @@ RPI.Zone.Overall.Summary <- RPI.All.Zones.Pixels |>
 print(RPI.Zone.Overall.Summary)
 ```
 
-```{r}
-# SECTION EXTENSION: PMLv2 & StudyPixels Zone Extractions
-# Building a unified habitat profile per zone combining:
-# → Productivity (RPI)
-# → Water-energy fluxes (PMLv2)
-# → Land cover composition (StudyPixels)
-```
+## SECTION EXTENSION: PMLv2 & StudyPixels Zone Extractions
+
+Building a unified habitat profile per zone combining:
+
+- Productivity (RPI)
+- Water-energy fluxes (PMLv2)
+- Land cover composition (StudyPixels)
 
 ```{r}
 # Confirm band names before extracting
@@ -1450,6 +954,7 @@ Cover.All.Zones.Pixels <- bind_rows(
   Cover.Pixels.TW.Excl
 ) |>
   mutate(
+    Value = Value * 100,   # StudyPixels stores 0-1 proportions -> convert to %
     ZONE = fct_relevel(
       ZONE,
       "Tsavo West NP",
@@ -1560,45 +1065,11 @@ Unified.Zone.Profile <- RPI.Zone.Overall.Summary |>
 print(Unified.Zone.Profile)
 ```
 
-```{r}
-# Cover columns above are in proportions not percentages
-# Confirm the issue
-Cover.All.Zones.Pixels |>
-  group_by(Band) |>
-  summarise(Min = min(Value), Max = max(Value))
+## SECTION 2: Temporal Trend Analysis
 
-# If values are still 0-1, apply the fix and rebuild
-Cover.All.Zones.Pixels <- Cover.All.Zones.Pixels |>
-  mutate(Value = Value * 100)
-
-# Rebuild cover summary
-Cover.Zone.Summary <- Cover.All.Zones.Pixels |>
-  group_by(ZONE, Band) |>
-  summarise(Mean = mean(Value, na.rm = TRUE), .groups = "drop") |>
-  pivot_wider(names_from = Band, values_from = Mean) |>
-  rename_with(~ paste0("Mean.", gsub("[^A-Za-z]", ".", .x)), .cols = -ZONE)
-
-# Rebuild unified profile
-Unified.Zone.Profile <- RPI.Zone.Overall.Summary |>
-  left_join(PMLv2.Zone.Summary,  by = "ZONE") |>
-  left_join(Cover.Zone.Summary,  by = "ZONE") |>
-  left_join(IGBP.Dominant,       by = "ZONE")
-
-# Verify cover columns now show percentages
-Unified.Zone.Profile |>
-  select(ZONE, 
-         Mean.Shrubland.Cover....,
-         Mean.Grassland.Cover....,
-         Mean.Tree.Cover....,
-         Mean.Bare.Ground....)
-```
-
-```{r}
-# SECTION 2: Temporal Trend Analysis
-# Theil-Sen slopes across the 22-year RPI time series (2000–2023)
-# Answering: has the RPI gap between the Rhino Range and the
-# rest of Tsavo West been growing, shrinking, or stable?
-```
+Theil-Sen slopes across the 22-year RPI time series (2000–2023)  
+Answering: has the RPI gap between the Rhino Range and the  
+rest of Tsavo West been growing, shrinking, or stable?
 
 ```{r}
 # Step 1: Add 5-year rolling mean to the annual summary table
@@ -1823,9 +1294,7 @@ cat("\n--- Pixel-level Trend Breakdown by Zone ---\n")
 print(RPI.Pixel.Trend.Summary)
 ```
 
-```{r}
-# SECTION 2 MAPS: Temporal Trend Visualisation of the above statistics
-```
+## SECTION 2 MAPS: Temporal Trend Visualisation of the above statistics
 
 ```{r}
 # Map 2.1: Sen's Slope across Tsavo West NP
@@ -1855,12 +1324,7 @@ Map.SenSlope <- tm_shape(RPI.Trend.Raster[["Sen.Slope"]]) +
   ) +
   tm_title("Pixel-level RPI Trend (Sen's Slope) — Tsavo West NP (2000–2023)") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  ))
+  tm_view(basemap.server = Basemaps)
 
 Map.SenSlope
 ```
@@ -1892,12 +1356,7 @@ Map.SenSlope.Significant <- tm_shape(RPI.Trend.Significant) +
   ) +
   tm_title("Statistically Significant RPI Trends (p < 0.05) — Tsavo West NP") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  ))
+  tm_view(basemap.server = Basemaps)
 
 Map.SenSlope.Significant
 ```
@@ -1985,10 +1444,9 @@ Map.TrendCategory
 tmap_arrange(Map.SenSlope, Map.SenSlope.Significant, Map.TrendCategory, ncol = 3)
 ```
 
-```{r}
-# SECTION 3: Habitat Gap Analysis
-# Visualising the productivity gap between the Rhino Range & the rest of Tsavo West NP across space and time
-```
+## SECTION 3: Habitat Gap Analysis
+
+Visualising the productivity gap between the Rhino Range & the rest of Tsavo West NP across space and time
 
 ```{r}
 # Shared colour palette — used consistently across all figures so zones are always identifiable by the same colour
@@ -2326,7 +1784,6 @@ Fig3.3.Gap.Trajectory
 
     # A raster map of pixel-level mean RPI difference — Rhino Range pixels highlighted against the broader Tsavo West context.
 
-tmap_mode("view")
 
 Fig3.4.RPI.Spatial.Gap.Map <- tm_shape(TsavoWest.RPI.Mean) +
   tm_raster(
@@ -2368,23 +1825,17 @@ Fig3.4.RPI.Spatial.Gap.Map <- tm_shape(TsavoWest.RPI.Mean) +
 
   tm_layout(legend.outside = TRUE) +
 
-  tm_view(basemap.server = c(
-    "Esri.WorldImagery",
-    "OpenStreetMap",
-    "Esri.WorldGrayCanvas",
-    "Esri.WorldTopoMap"
-  ))
+  tm_view(basemap.server = Basemaps)
 
 Fig3.4.RPI.Spatial.Gap.Map
 ```
 
-```{r}
-# SECTION 4(A): Land Cover × RPI Cross-Analysis
-  # Linking PMLv2/StudyPixels to RPI for habitat characterisation
-    # Answering: WHY does the productivity gap exist?
-      # Point-sampling all variables at RPI pixel locations
-        # Eliminates coordinate mismatch from different raster grids
-```
+## SECTION 4(A): Land Cover × RPI Cross-Analysis
+
+Linking PMLv2/StudyPixels to RPI for habitat characterisation  
+Answering: WHY does the productivity gap exist?  
+Point-sampling all variables at RPI pixel locations  
+Eliminates coordinate mismatch from different raster grids
 
 ```{r}
 # Step 1: Get unique RPI pixel centroids as a SpatVector
@@ -2542,30 +1993,6 @@ Pixel.CrossAnalysis |>
 ```
 
 ```{r}
-# Step 7: Build Pixel.IGBP.RPI for Fig 4.4
-  # Directly from Pixel.CrossAnalysis
-Pixel.IGBP.RPI <- Pixel.CrossAnalysis |>
-  filter(
-    !is.na(IGBP.Label),
-    ZONE %in% c(
-      "Tsavo West NP",
-      "Tsavo West (excl. Rhino Range)",
-      "Rhino Range (Ngulia + IPZ)"
-    )
-  )
-
-cat("IGBP × RPI table:\n")
-Pixel.IGBP.RPI |>
-  group_by(ZONE, IGBP.Label) |>
-  summarise(
-    N        = n(),
-    Mean.RPI = round(mean(Mean.RPI, na.rm = TRUE), 3),
-    .groups  = "drop"
-  ) |>
-  print()
-```
-
-```{r}
 # Step 7 (Revised): Add shrubland intensity bins to Pixel.CrossAnalysis
   # Replaces IGBP class comparison with ESA shrubland intensity
 
@@ -2611,13 +2038,6 @@ Pixel.Shrub.RPI |>
     .groups  = "drop"
   ) |>
   print()
-
-# Rebuild subsample to include the new Shrub.Class column
-set.seed(42)
-Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
-  group_by(ZONE) |>
-  slice_sample(n = 3000) |>
-  ungroup()
 ```
 
 ```{r}
@@ -2963,10 +2383,9 @@ Fig4.4.Shrub.Profiles <- ggplot(
 Fig4.4.Shrub.Profiles
 ```
 
-```{r}
-# SECTION 4B: Terrain & Hydrology Analysis
-  # Integrating topographic and hydrological variables into Tsavo West Rhino Expansion habitat intelligence framework
-```
+## SECTION 4B: Terrain & Hydrology Analysis
+
+Integrating topographic and hydrological variables into Tsavo West Rhino Expansion habitat intelligence framework
 
 ```{r}
 # Step 1: Download SRTM DEM for Tsavo West
@@ -2974,7 +2393,7 @@ Fig4.4.Shrub.Profiles
     # z = 10 → ~76m resolution, appropriate for Tsavo West's 9,065 km²
       # z = 11 → ~38m, usable but memory-intensive for this extent
 
-DEM.File.Path <- "C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/Terrain/TsavoWest_DEM.tif"
+DEM.File.Path <- Data.Path("Terrain", "TsavoWest_DEM.tif")
 
 if (!file.exists(DEM.File.Path)) {
   
@@ -3084,7 +2503,7 @@ names(TsavoWest.Aspect.Class) <- "Aspect_Class"
     # Save each step to disk — prevents needing to rerun
 
 # Define working directory for WhiteboxTools files
-WBT.Dir <- "C:/Workspace/Mureithi_RPI_TsavoWest_Rhino_Expansion/data/Terrain/WBT"
+WBT.Dir <- Data.Path("Terrain", "WBT")
 dir.create(WBT.Dir, showWarnings = FALSE, recursive = TRUE)
 
 # Export DEM to WBT directory (WhiteboxTools works with file paths)
@@ -3408,45 +2827,37 @@ Pixel.CrossAnalysis.Sample <- Pixel.CrossAnalysis |>
 cat("\nUpdated sample dimensions:", dim(Pixel.CrossAnalysis.Sample), "\n")
 ```
 
-```{r}
-# Terrain & Hydrology Zone Summary — Interpretation
+### Terrain & Hydrology Zone Summary — Interpretation
 
-# Elevation
-## All zones sit at remarkably similar mean elevations (796–806m), with one notable exception — Ngulia Sanctuary at 682m. This is ecologically correct and important: Ngulia is not perched on top of the Ngulia Hills — it is a valley basin enclosed by the escarpment. The hills form the walls, the sanctuary is the bowl. This explains why Ngulia has the highest shrubland cover and RPI despite lower elevation — it sits in a sheltered, moisture-retaining topographic position.
-## This is a significant finding for expansion feasibility. The potential expansion zone (Tsavo West excl. Rhino Range) is the flattest and least rugged terrain in the park — meaning it poses the lowest movement cost for rhinos. This is actually a positive finding for expansion — terrain is not a barrier. However it also means the expansion zone lacks the topographic complexity that provides security cover in the current Rhino Range.
+#### Elevation
 
-# Topographic Wetness Index (TWI)
-## Tsavo West excl. Rhino Range has the highest TWI (5.29) compared to the Rhino Range (4.89). Higher TWI indicates greater soil moisture accumulation potential — meaning the expansion zone has more moisture-retaining terrain despite lower RPI. This reinforces the land cover explanation: the expansion zone has moisture potential but it is expressed as grassland rather than shrubland, hence lower productivity.
+All zones sit at remarkably similar mean elevations (796–806m), with one notable exception — Ngulia Sanctuary at 682m. This is ecologically correct and important: Ngulia is not perched on top of the Ngulia Hills — it is a valley basin enclosed by the escarpment. The hills form the walls, the sanctuary is the bowl. This explains why Ngulia has the highest shrubland cover and RPI despite lower elevation — it sits in a sheltered, moisture-retaining topographic position.
 
-# Distance to Water — The Critical Constraint
-## The water access gradient is subtle but consistent — Ngulia has the best water access, the expansion zone has the worst. The difference is not dramatic (~1km mean difference) but the maximum distance of 11.5km in the expansion zone means some areas are genuinely water-limited for rhinos needing access every 2–4 days.
-```
+This is a significant finding for expansion feasibility. The potential expansion zone (Tsavo West excl. Rhino Range) is the flattest and least rugged terrain in the park — meaning it poses the lowest movement cost for rhinos. This is actually a positive finding for expansion — terrain is not a barrier. However it also means the expansion zone lacks the topographic complexity that provides security cover in the current Rhino Range.
 
-```{r}
-# # Distance to Water — The Critical Constraint {TO CHECK REASON WHY ABOVE}
+#### Topographic Wetness Index (TWI)
 
-Terrain.Zone.Summary |>
-  select(ZONE, Pct.Within.2km, Pct.Within.5km) |>
-  print()
-```
+Tsavo West excl. Rhino Range has the highest TWI (5.29) compared to the Rhino Range (4.89). Higher TWI indicates greater soil moisture accumulation potential — meaning the expansion zone has more moisture-retaining terrain despite lower RPI. This reinforces the land cover explanation: the expansion zone has moisture potential but it is expressed as grassland rather than shrubland, hence lower productivity.
 
-```{r}
-# Water Access — Complete Interpretation
-## The headline finding: water access is NOT a major differentiating constraint between the Rhino Range and the expansion zone.
+#### Distance to Water — The Critical Constraint
 
-## The difference between the Rhino Range (41.7% within 2km) and Tsavo West excl. Rhino Range (40.1% within 2km) is only 1.6 percentage points — effectively negligible. At the 5km threshold the gap is slightly larger (4.4 points) but still modest.
+The water access gradient is subtle but consistent — Ngulia has the best water access, the expansion zone has the worst. The difference is not dramatic (~1km mean difference) but the maximum distance of 11.5km in the expansion zone means some areas are genuinely water-limited for rhinos needing access every 2–4 days.
 
-## This is an important finding for the expansion feasibility argument because it means terrain and water access do not constitute structural barriers to expansion — the limiting factor is overwhelmingly land cover composition and habitat productivity, not physical accessibility.
+### Water Access — Complete Interpretation
 
-## Ngulia has 16 percentage points more pixels within daily rhino water access range than any other zone. Combined with its valley basin topography, highest shrubland cover (86%), and highest GPP (125 gC/m²/yr), this explains why Ngulia maintains the highest RPI of all zones — it is the single most habitat-optimal sub-zone in the entire park across every metric simultaneously.
+The headline finding: water access is NOT a major differentiating constraint between the Rhino Range and the expansion zone.
 
-# The 20% water-limited fraction in the expansion zone:
-## Approximately 20.8% of Tsavo West excl. Rhino Range pixels lie beyond 5km from water. This is the only genuine water-access concern for expansion — not as a zone-wide barrier, but as a spatial constraint that would limit where within the expansion zone rhinos could establish permanent home ranges. This maps directly onto  spatial figures — areas beyond 5km from water in the expansion zone would need either artificial water provision or should be deprioritised in any expansion planning.
-```
+The difference between the Rhino Range (41.7% within 2km) and Tsavo West excl. Rhino Range (40.1% within 2km) is only 1.6 percentage points — effectively negligible. At the 5km threshold the gap is slightly larger (4.4 points) but still modest.
 
-```{r}
-# SECTION 4B MAPS
-```
+This is an important finding for the expansion feasibility argument because it means terrain and water access do not constitute structural barriers to expansion — the limiting factor is overwhelmingly land cover composition and habitat productivity, not physical accessibility.
+
+Ngulia has 16 percentage points more pixels within daily rhino water access range than any other zone. Combined with its valley basin topography, highest shrubland cover (86%), and highest GPP (125 gC/m²/yr), this explains why Ngulia maintains the highest RPI of all zones — it is the single most habitat-optimal sub-zone in the entire park across every metric simultaneously.
+
+#### The 20% water-limited fraction in the expansion zone
+
+Approximately 20.8% of Tsavo West excl. Rhino Range pixels lie beyond 5km from water. This is the only genuine water-access concern for expansion — not as a zone-wide barrier, but as a spatial constraint that would limit where within the expansion zone rhinos could establish permanent home ranges. This maps directly onto  spatial figures — areas beyond 5km from water in the expansion zone would need either artificial water provision or should be deprioritised in any expansion planning.
+
+## SECTION 4B MAPS
 
 ```{r}
 # Map B1: Elevation
@@ -3475,8 +2886,7 @@ Map.Elevation <- tm_shape(TsavoWest.Elevation) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "#762a83", lwd = 2, id = "NAME") +
   tm_title("Elevation — Tsavo West NP\nWhite outline = Rhino Range | Purple = Ngulia Sanctuary") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.Elevation
 ```
@@ -3505,8 +2915,7 @@ Map.Slope <- tm_shape(TsavoWest.Slope) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
   tm_title("Slope — Tsavo West NP\nClassified by black rhino movement feasibility") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.Slope
 ```
@@ -3536,8 +2945,7 @@ Map.TRI <- tm_shape(TsavoWest.TRI) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
   tm_title("Terrain Ruggedness Index — Tsavo West NP\nLower values = lower movement cost for rhinos") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.TRI
 ```
@@ -3566,8 +2974,7 @@ Map.TWI <- tm_shape(TsavoWest.TWI) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
   tm_title("Topographic Wetness Index — Tsavo West NP\nHigher values = greater soil moisture accumulation") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.TWI
 ```
@@ -3598,8 +3005,7 @@ Map.DistToWater <- tm_shape(TsavoWest.DistToWater) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "#762a83", lwd = 2, id = "NAME") +
   tm_title("Distance to Nearest Water Source — Tsavo West NP\nCritical constraint for black rhino expansion feasibility") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.DistToWater
 ```
@@ -3627,8 +3033,7 @@ Map.Hydro.Combined <- tm_shape(TsavoWest.TWI) +
   tm_polygons(fill = NA, fill_alpha = 0, col = "white", lwd = 2, id = "NAME") +
   tm_title("Hydrological Network + Soil Moisture Potential\nBlue lines = drainage network (contributing area > 289 ha)") +
   tm_layout(legend.outside = TRUE) +
-  tm_view(basemap.server = c("Esri.WorldImagery", "OpenStreetMap",
-                              "Esri.WorldGrayCanvas", "Esri.WorldTopoMap"))
+  tm_view(basemap.server = Basemaps)
 
 Map.Hydro.Combined
 ```
@@ -3879,4 +3284,766 @@ FigB4.Extended.Heatmap <- ggplot(
 FigB4.Extended.Heatmap
 ```
 
+## SECTION 5: Habitat Suitability Models (HSM) - Black rhino in Tsavo West NP and cheetah across the Tsavo Conservation Area (TCA)
+
+Sections 1-4 described the habitat *where rhinos already are*. Section 5 turns that into a map of *where else the habitat is suitable*, so the expansion question can be answered spatially.
+
+**Which data source? GBIF vs Google Earth Engine (GEE).** They do different jobs, so the choice is not either/or:
+
+- **GBIF** (open, free) supplies *species records*. It was queried on 2026-10-28 for the Tsavo area (lon 37.3-39.9, lat -4.4 to -2.2): 54 black rhino and 115 cheetah records, many of them recent. But **37 of the 54 rhino and 108 of the 115 cheetah records are iNaturalist observations whose coordinates are deliberately obscured** (threatened species; about 31 km uncertainty). Only 1 rhino and 6 cheetah records have a coordinate uncertainty of 1 km or less. At a 500 m model grain, obscured points are noise, so GBIF alone cannot drive a fine-scale model for either species. It is still used here as a free, automatic supplement and as a reality check.
+- **GEE** holds no species records either: the Crego et al. case studies upload their own presence points as an asset. What GEE does well is *predictor layers* (rainfall, NDVI, surface water) and compute. The modelling therefore stays in R (this script), and GEE only exports extra predictor GeoTIFFs to Google Drive with the same convention as the Amaka and Kitobo projects (script in `scripts/gee/`).
+
+**Presence data, in order of preference** (chosen in Step 8 for the rhino and Steps 14-15 for the cheetah):
+
+1. `occurrences`: precise records supplied as `data/Species/<species>_occurrences.csv` (columns `lon`, `lat`, optional `year`, `uncertainty_m`; e.g. KWS / AWF / SMART patrol or sighting data), otherwise cleaned GBIF records.
+2. `range_proxy` (rhino only): every 500 m cell of the occupied Rhino Range (Ngulia Sanctuary + IPZ) is a presence. This yields a *habitat-similarity* model: which parts of the rest of the park look like the habitat the rhinos already use? It does not show where rhinos choose to go, because the range is fenced and managed.
+3. `prior`: if fewer than `Min.Presences` cleaned records exist, an editable expert-prior index (weighted geometric mean of trapezoid suitability functions) is used instead. It is a template to be reviewed by species experts, not a validated model.
+
+**Modelling method** follows the GEE case studies of Crego, Stabach and Connette, translated to R: random-forest probability models, 10 repetitions with fixed seeds, a 70/30 split of *spatial blocks* (not of points) for training and testing, pseudo-absences balanced against presences, AUC-ROC / AUC-PR / threshold that maximises sensitivity + specificity, and the mean of the repetitions as the final suitability map (HSI, 0-1).
+
+**Data sensitivity.** Precise rhino locations are poaching-sensitive. Keep `data/Species/` out of Git, and share only the 500 m HSI rasters, never the points.
+
 ```{r}
+# Step 1: HSM settings
+
+HSM.Config <- list(
+  Grain.m       = 500,             # model grain (m): PMLv2 native is 500 m, RPI is ~460 m
+  CRS           = "EPSG:32737",    # UTM 37S - metres, covers all of Tsavo
+  Year.Min      = 2010,            # drop records older than this
+  Max.Unc.m     = 1000,            # drop records less precise than this (m); obscured iNaturalist records are ~31,000 m
+  Min.Presences = 30,              # below this, the data-driven model is not fitted
+  N.Iter        = 10,              # repetitions (Crego et al. use 10)
+  Split         = 0.70,            # share of spatial BLOCKS used for training
+  N.Trees       = 500,
+  Max.Train     = 2000,            # cap on presences (and as many pseudo-absences) per run; more adds nothing for autocorrelated cells
+  Corr.Max      = 0.70,            # drop one of two predictors with |Spearman r| above this
+  Seeds         = c(35, 68, 43, 54, 17, 46, 76, 88, 24, 12)   # fixed seeds -> reproducible results
+)
+
+HSM.Dir.Out     <- file.path(Dir.Project, "outputs", "HSM")   # HSI rasters and tables
+HSM.Dir.Species <- Data.Path("Species")        # precise occurrence CSVs + GBIF cache -> keep OUT of Git
+HSM.Dir.GEE     <- Data.Path("gee_exports")    # GeoTIFFs downloaded from the Drive folder TsavoHSM_GEE_Exports
+
+dir.create(HSM.Dir.Out,     recursive = TRUE, showWarnings = FALSE)
+dir.create(HSM.Dir.Species, recursive = TRUE, showWarnings = FALSE)
+```
+
+```{r}
+# Step 2: Study areas and management units
+
+# Rhino: Tsavo West NP
+HSM.AOI.Rhino <- TsavoWest |>
+  st_transform(HSM.Config$CRS) |>
+  st_make_valid()
+
+HSM.Zones.Rhino <- list(
+  "Tsavo West NP"                  = TsavoWest,
+  "Rhino Range (Ngulia + IPZ)"     = TsavoWest.Rhino.Range,
+  "Ngulia Sanctuary"               = NguliaSanctuary,
+  "Intensive Protection Zone"      = TsavoWestIPZ,
+  "Tsavo West (excl. Rhino Range)" = TsavoWest.Excl.RhinoRange
+)
+
+# Cheetah: Tsavo Conservation Area = Tsavo East + Tsavo West + South Kitui + Chyulu Hills + the TTWCA ranches
+# TCAFInal.shp ships without a .prj; its coordinates are UTM 37S (97% overlap with the WDPA Tsavo West / East polygons)
+# Mkomazi (Tanzania) is left out: PMLv2 and StudyPixels cover Kenya only
+TCA.Parks <- st_read(Data.Path("Tsavo_Conservation_Areas", "TCAFInal.shp"), quiet = TRUE) |>
+  st_set_crs(32737) |>
+  st_make_valid() |>
+  filter(AREANAME %in% c("Tsavo East", "Tsavo West", "South Kitui"))
+
+Chyulu.Hills <- st_read(
+  Data.Path("WDPA_Amboseli_Tsavo", "National Parks&Reserves", "ChyuluHills-WDPA_WDOECM_Apr2025_Public_19563_shp",
+            "WDPA_WDOECM_Apr2025_Public_19563_shp_0", "WDPA_WDOECM_Apr2025_Public_19563_shp-polygons.shp"),
+  quiet = TRUE
+)
+
+TTWCA.Ranches <- st_read(Data.Path("Tsavo_Conservation_Areas", "RanchesTTWCA.shp"), quiet = TRUE)
+
+# One dissolved polygon per management unit
+as_unit <- function(x) st_union(st_make_valid(st_transform(x, HSM.Config$CRS)))
+
+HSM.Zones.Cheetah <- list(
+  "Tsavo East NP"   = as_unit(filter(TCA.Parks, AREANAME == "Tsavo East")),
+  "Tsavo West NP"   = as_unit(filter(TCA.Parks, AREANAME == "Tsavo West")),
+  "South Kitui NR"  = as_unit(filter(TCA.Parks, AREANAME == "South Kitui")),
+  "Chyulu Hills NP" = as_unit(Chyulu.Hills),
+  "TTWCA ranches"   = as_unit(TTWCA.Ranches)
+)
+
+# Study area = union of the units; a 10 km buffer followed by -5 km closes small gaps between them
+# (cheetahs cross park boundaries) and leaves a 5 km margin around the outer edge
+HSM.AOI.Cheetah <- do.call(c, unname(HSM.Zones.Cheetah)) |>
+  st_union() |>
+  st_buffer(10000) |>
+  st_buffer(-5000) |>
+  st_sf(geometry = _)
+
+HSM.Zones.Cheetah.sf <- st_sf(
+  NAME     = names(HSM.Zones.Cheetah),
+  geometry = do.call(c, unname(HSM.Zones.Cheetah))
+)
+
+cat("Rhino AOI   (km2):", round(as.numeric(st_area(HSM.AOI.Rhino)) / 1e6), "\n")
+cat("Cheetah AOI (km2):", round(as.numeric(st_area(HSM.AOI.Cheetah)) / 1e6), "\n")
+```
+
+```{r}
+# Step 3: Toolbox 1 - model grid and predictors
+  # Everything is put on ONE grid (500 m, UTM 37S) per study area, once, as in the Amaka / Kitobo projects:
+  # source rasters stay on their native grids until this point
+
+make_hsm_template <- function(aoi_sf, grain, crs) {
+  v <- vect(st_transform(aoi_sf, crs))
+  e <- ext(v)
+  r <- rast(
+    ext(floor(e[1] / grain) * grain, ceiling(e[2] / grain) * grain,
+        floor(e[3] / grain) * grain, ceiling(e[4] / grain) * grain),
+    resolution = grain, crs = crs
+  )
+  r <- rasterize(v, r, field = 1, background = NA)    # 1 inside the study area, NA outside
+  names(r) <- "AOI"
+  r
+}
+
+# Crop a source raster to the study area (+ margin), then resample onto the template
+to_grid <- function(r, template, method = "bilinear", margin = 0.05) {
+  e <- project(ext(template), from = crs(template), to = crs(r))
+  r <- crop(r, ext(e[1] - margin, e[2] + margin, e[3] - margin, e[4] + margin))
+  project(r, template, method = method)
+}
+
+# Distance (km) to the nearest surface water
+  # Preferred: JRC surface water exported from GEE (scripts/gee/01_TCA_HSM_predictors_export.js)
+  # Fallback (Tsavo West only): the WhiteboxTools stream network from Section 4B
+water_distance_km <- function(template, tag) {
+  f <- list.files(HSM.Dir.GEE, pattern = "^jrc_surface_water.*\\.tif$", full.names = TRUE)
+
+  if (length(f) > 0) {
+    wide  <- extend(template, 50)                                   # 25 km margin so water just outside the AOI counts
+    water <- to_grid(rast(f[1])[["water_any"]], wide, method = "max", margin = 0.3)
+    d     <- distance(ifel(water > 0, 1, NA)) / 1000
+    d     <- mask(crop(d, template), template)
+    names(d) <- "Dist_Water_km"
+    return(d)
+  }
+
+  if (tag == "TW" && exists("TsavoWest.DistToWater")) {
+    d <- mask(to_grid(TsavoWest.DistToWater, template), template)
+    names(d) <- "Dist_Water_km"
+    return(d)
+  }
+
+  message("No water layer for ", tag, " - run the GEE export script (JRC surface water) to add Dist_Water_km")
+  NULL
+}
+
+# Optional GEE predictors (CHIRPS rainfall, MODIS NDVI) - used only if the GeoTIFFs have been downloaded
+gee_predictors <- function(template) {
+  f <- list.files(HSM.Dir.GEE, pattern = "^(chirps_rain|modis_ndvi).*\\.tif$", full.names = TRUE)
+  if (length(f) == 0) return(NULL)
+  do.call(c, lapply(f, function(p) to_grid(rast(p), template)))
+}
+
+build_hsm_predictors <- function(template, dem_file, tag) {
+
+  # Productivity: mean and year-to-year variability of RPI (reliability of forage)
+  RPI.g    <- to_grid(RPI, template)
+  RPI.Mean <- mean(RPI.g, na.rm = TRUE)
+  RPI.CV   <- stdev(RPI.g, na.rm = TRUE) / RPI.Mean
+  RPI.CV   <- ifel(is.finite(RPI.CV), RPI.CV, NA)
+  names(RPI.Mean) <- "RPI.Mean"
+  names(RPI.CV)   <- "RPI.CV"
+
+  # Water-energy fluxes and land cover (columns are 0-1 proportions)
+  PML.g <- to_grid(PMLv2.Kenya[[c("GPP", "Ec", "Es")]], template)
+  Cov.g <- to_grid(StudyPixelsKenya[[c("trees", "shrubland", "grassland", "bare")]], template)
+  names(Cov.g) <- c("Trees", "Shrubland", "Grassland", "Bare")
+
+  # Terrain from the DEM (slope and TRI computed at native DEM resolution, then averaged to 500 m)
+  DEM     <- rast(dem_file)[[1]]
+  Terrain <- c(DEM, terrain(DEM, "slope", unit = "degrees"), terrain(DEM, "TRI"))
+  names(Terrain) <- c("Elevation_m", "Slope_deg", "TRI")
+  Terrain <- to_grid(Terrain, template, method = "average")
+
+  # Human pressure: WorldPop population density (people per km2), log-transformed
+  PD <- rast(Data.Path("Country_Borders", "ken_pd_2020_1km.tif"))
+  PD <- ifel(PD < 0, NA, PD)
+  Pop_log10 <- log10(1 + to_grid(PD, template))
+  names(Pop_log10) <- "Pop_log10"
+
+  Stack <- c(RPI.Mean, RPI.CV, PML.g, Cov.g, Terrain, Pop_log10)
+
+  Water <- water_distance_km(template, tag)
+  if (!is.null(Water)) Stack <- c(Stack, Water)
+
+  GEE <- gee_predictors(template)
+  if (!is.null(GEE)) Stack <- c(Stack, GEE)
+
+  mask(Stack, template)
+}
+
+# Keep the more meaningful predictor of every highly correlated pair (Spearman), in priority order
+drop_collinear <- function(Cells, priority, r_max, n_sample = 5000) {
+  S    <- Cells[sample(nrow(Cells), min(n_sample, nrow(Cells))), , drop = FALSE]
+  keep <- character()
+  for (v in priority) {
+    if (!v %in% names(S) || sd(S[[v]], na.rm = TRUE) == 0) next
+    r <- if (length(keep) > 0) suppressWarnings(abs(cor(S[[v]], S[, keep, drop = FALSE], method = "spearman"))) else 0
+    if (all(r < r_max, na.rm = TRUE)) {
+      keep <- c(keep, v)
+    } else {
+      cat(sprintf("  dropped %-14s (|r| = %.2f with %s)\n", v, max(r, na.rm = TRUE), keep[which.max(r)]))
+    }
+  }
+  keep
+}
+
+HSM.Priority <- c("RPI.Mean", "Shrubland", "Grassland", "Trees", "Bare", "Dist_Water_km", "Slope_deg", "Elevation_m",
+                  "TRI", "Pop_log10", "RPI.CV", "GPP", "Ec", "Es")
+```
+
+```{r}
+# Step 4: Toolbox 2 - species records (GBIF or supplied) and record cleaning
+
+# Download records from GBIF for the study-area bounding box (cached to CSV; refresh = TRUE to download again)
+  # For anything you publish, request a citable DOI instead: rgbif::occ_download() (needs a free GBIF account)
+  # iNaturalist research-grade records are CC BY-NC: cite them
+get_gbif_occurrences <- function(latin, aoi_sf, year_min, cache_file, refresh = FALSE) {
+
+  if (file.exists(cache_file) && !refresh) return(readr::read_csv(cache_file, show_col_types = FALSE))
+
+  bb  <- st_bbox(st_transform(aoi_sf, 4326))
+  key <- rgbif::name_backbone(name = latin, rank = "species")$usageKey
+  res <- rgbif::occ_data(
+    taxonKey           = key,
+    geometry           = rgbif::gbif_bbox2wkt(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]]),
+    hasCoordinate      = TRUE,
+    hasGeospatialIssue = FALSE,
+    occurrenceStatus   = "PRESENT",
+    year               = paste0(year_min, ",", format(Sys.Date(), "%Y")),
+    limit              = 5000
+  )
+  d <- res$data
+  if (is.null(d) || nrow(d) == 0) return(tibble())
+
+  for (n in c("year", "basisOfRecord", "coordinateUncertaintyInMeters", "issues", "informationWithheld", "datasetName")) {
+    if (!n %in% names(d)) d[[n]] <- NA
+  }
+
+  out <- tibble(
+    lon     = d$decimalLongitude,
+    lat     = d$decimalLatitude,
+    year    = d$year,
+    basis   = d$basisOfRecord,
+    unc     = as.numeric(d$coordinateUncertaintyInMeters),
+    issues  = as.character(d$issues),
+    withheld = as.character(d$informationWithheld),
+    dataset = d$datasetName
+  )
+  readr::write_csv(out, cache_file)
+  out
+}
+
+# Read a user-supplied CSV: lon, lat (+ optional year, uncertainty_m)
+read_supplied_occurrences <- function(csv_file) {
+  d <- readr::read_csv(csv_file, show_col_types = FALSE)
+  stopifnot(all(c("lon", "lat") %in% names(d)))
+  if ("uncertainty_m" %in% names(d)) d$unc <- as.numeric(d$uncertainty_m)
+  d
+}
+
+# Cleaning cascade -> returns the records kept (as sf, UTM) and a table showing how many survive each step
+clean_occurrences <- function(d, template, cfg) {
+
+  Steps <- tibble(Step = "Records downloaded / supplied", N = nrow(d))
+  add_step <- function(label, x) { Steps <<- bind_rows(Steps, tibble(Step = label, N = nrow(x))); x }
+  has   <- function(col) col %in% names(d)
+
+  if (nrow(d) == 0) return(list(points = NULL, steps = Steps))
+
+  d <- add_step("with coordinates", d[!is.na(d$lon) & !is.na(d$lat), ])
+  if (has("year"))     d <- add_step(paste0("year >= ", cfg$Year.Min), d[!is.na(d$year) & d$year >= cfg$Year.Min, ])
+  if (has("basis"))    d <- add_step("field observations (no museum specimens)", d[d$basis %in% c("HUMAN_OBSERVATION", "OBSERVATION", "MACHINE_OBSERVATION"), ])
+  if (has("unc"))      d <- add_step(paste0("coordinate uncertainty <= ", cfg$Max.Unc.m, " m"), d[!is.na(d$unc) & d$unc <= cfg$Max.Unc.m, ])
+  if (has("issues"))   d <- add_step("coordinates not rounded", d[!grepl("COORDINATE_ROUNDED", d$issues), ])
+  if (has("withheld")) d <- add_step("location not withheld / obscured", d[is.na(d$withheld), ])
+
+  if (nrow(d) == 0) return(list(points = NULL, steps = Steps))
+
+  pts <- st_as_sf(d, coords = c("lon", "lat"), crs = 4326) |> st_transform(crs(template))
+  pts$cell <- cellFromXY(template, st_coordinates(pts))
+
+  # keep records whose cell lies inside the study area (template is NA outside it)
+  inside     <- rep(FALSE, nrow(pts))
+  ok         <- !is.na(pts$cell)
+  inside[ok] <- !is.na(template[pts$cell[ok]][[1]])
+  pts <- add_step("inside the study area", pts[inside, ])
+  pts <- add_step("one record per 500 m cell", pts[!duplicated(pts$cell), ])
+
+  list(points = pts, steps = Steps)
+}
+
+# Rhino 'range_proxy' mode: every template cell inside the occupied range is a presence
+range_proxy_cells <- function(range_sf, template) {
+  v <- vect(st_transform(range_sf, crs(template)))
+  e <- terra::extract(template, v, cells = TRUE)
+  unique(e$cell[!is.na(e$AOI)])
+}
+```
+
+```{r}
+# Step 5: Toolbox 3 - random-forest HSM engine (spatial-block cross-validation, repeated)
+
+# Accuracy on the held-out blocks: AUC-ROC (rank-based), AUC-PR (trapezoid over 101 cutoffs),
+# and the cutoff that maximises sensitivity + specificity (as in the GEE case studies)
+eval_hsm <- function(obs, pred) {
+  n1 <- sum(obs == 1); n0 <- sum(obs == 0)
+  auc.roc <- (sum(rank(pred)[obs == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+
+  cuts <- seq(0, 1, length.out = 101)
+  tp   <- sapply(cuts, function(k) sum(pred > k & obs == 1))
+  fp   <- sapply(cuts, function(k) sum(pred > k & obs == 0))
+  sens <- tp / n1
+  spec <- (n0 - fp) / n0
+  prec <- ifelse(tp + fp == 0, 1, tp / (tp + fp))
+  o    <- order(sens)
+  auc.pr <- sum(diff(sens[o]) * (head(prec[o], -1) + tail(prec[o], -1)) / 2)
+  best <- which.max(sens + spec)
+
+  tibble(
+    AUC.ROC = auc.roc, AUC.PR = auc.pr, Threshold = cuts[best],
+    Sensitivity = sens[best], Specificity = spec[best], TSS = sens[best] + spec[best] - 1
+  )
+}
+
+# Environmental profiling (Crego et al., Case study 1, option 3): cluster the presence cells into 2 groups,
+# then only allow pseudo-absences in cells closer to the cluster the presences use LESS
+env_dissimilar <- function(Cells, vars) {
+  Z  <- scale(Cells[, vars, drop = FALSE])
+  km <- kmeans(Z[Cells$Pres == 1, , drop = FALSE], centers = 2, nstart = 10)
+  d  <- sapply(1:2, function(k) rowSums((Z - matrix(km$centers[k, ], nrow(Z), ncol(Z), byrow = TRUE))^2))
+  cl <- max.col(-d)
+  cl != which.max(tabulate(cl[Cells$Pres == 1], 2))
+}
+
+fit_hsm_rf <- function(Cells, pres_cells, vars, template, block_km, cfg, pa_method = "random") {
+
+  Cells$Pres  <- as.integer(Cells$cell %in% pres_cells)
+  Cells$Block <- paste(floor((Cells$x - min(Cells$x)) / (block_km * 1000)),
+                       floor((Cells$y - min(Cells$y)) / (block_km * 1000)))
+
+  Candidates <- Cells[Cells$Pres == 0, ]                     # pseudo-absences never fall in a presence cell
+  if (pa_method == "envprofile") Candidates <- Candidates[env_dissimilar(Cells, vars)[Cells$Pres == 0], ]
+
+  cat(sprintf("Presences: %d | candidate pseudo-absence cells: %d | spatial blocks: %d (%d km)\n",
+              sum(Cells$Pres), nrow(Candidates), length(unique(Cells$Block)), block_km))
+
+  Seeds   <- rep_len(cfg$Seeds, cfg$N.Iter)
+  Preds   <- matrix(NA_real_, nrow(Cells), cfg$N.Iter)
+  Metrics <- list(); Importance <- list(); Models <- list()
+
+  for (i in seq_len(cfg$N.Iter)) {
+
+    # Random split of BLOCKS into training / testing; redraw until both hold enough presences
+    for (attempt in 0:99) {
+      set.seed(Seeds[i] + 1000 * attempt)
+      blocks   <- unique(Cells$Block)
+      tr.block <- blocks[runif(length(blocks)) < cfg$Split]
+      n.tr     <- sum(Cells$Pres == 1 &  Cells$Block %in% tr.block)
+      n.te     <- sum(Cells$Pres == 1 & !Cells$Block %in% tr.block)
+      if (n.tr >= 10 && n.te >= 5) break
+    }
+    if (attempt == 99) stop("Could not split the presences across training and testing blocks - use smaller blocks")
+
+    # Presences capped at Max.Train; pseudo-absences: as many as presences, drawn separately inside training and testing blocks
+    draw    <- function(rows, n) rows[sample(nrow(rows), min(n, nrow(rows))), ]
+    Pres.tr <- draw(Cells[Cells$Pres == 1 &  Cells$Block %in% tr.block, ], cfg$Max.Train)
+    Pres.te <- draw(Cells[Cells$Pres == 1 & !Cells$Block %in% tr.block, ], cfg$Max.Train)
+    Train <- rbind(Pres.tr, draw(Candidates[ Candidates$Block %in% tr.block, ], nrow(Pres.tr)))
+    Test  <- rbind(Pres.te, draw(Candidates[!Candidates$Block %in% tr.block, ], nrow(Pres.te)))
+
+    rf <- ranger::ranger(
+      x = Train[, vars, drop = FALSE], y = factor(Train$Pres, levels = c(0, 1)),
+      num.trees = cfg$N.Trees, probability = TRUE, min.node.size = 10, sample.fraction = 0.5,
+      importance = "permutation", seed = Seeds[i]
+    )
+
+    Metrics[[i]]    <- eval_hsm(Test$Pres, predict(rf, Test[, vars, drop = FALSE])$predictions[, "1"]) |> mutate(Run = i)
+    Importance[[i]] <- tibble(Variable = names(rf$variable.importance), Importance = rf$variable.importance, Run = i)
+    Preds[, i]      <- predict(rf, Cells[, vars, drop = FALSE])$predictions[, "1"]
+    Models[[i]]     <- rf
+  }
+
+  to_raster <- function(v) { r <- rast(template); values(r) <- NA; r[Cells$cell] <- v; r }
+  Metrics   <- bind_rows(Metrics)
+
+  list(
+    HSI        = to_raster(rowMeans(Preds)),
+    HSI.SD     = to_raster(apply(Preds, 1, sd)),
+    Metrics    = Metrics,
+    Importance = bind_rows(Importance) |> group_by(Variable) |> summarise(Importance = mean(Importance), .groups = "drop") |> arrange(desc(Importance)),
+    Threshold  = mean(Metrics$Threshold),
+    Models     = Models,
+    Vars       = vars,
+    Cells      = Cells
+  )
+}
+
+# Partial dependence: how mean HSI changes along one predictor with the others held at their observed values
+partial_dependence <- function(Fit, top_n = 6, n_grid = 15, n_rows = 500, n_models = 3) {
+  set.seed(1)
+  Base <- Fit$Cells[sample(nrow(Fit$Cells), min(n_rows, nrow(Fit$Cells))), Fit$Vars, drop = FALSE]
+  Vars <- head(Fit$Importance$Variable, top_n)
+
+  bind_rows(lapply(Vars, function(v) {
+    g <- unique(quantile(Fit$Cells[[v]], probs = seq(0.02, 0.98, length.out = n_grid)))
+    tibble(
+      Variable = v, Value = g,
+      HSI = sapply(g, function(val) {
+        b <- Base; b[[v]] <- val
+        mean(sapply(head(Fit$Models, n_models), function(m) mean(predict(m, b)$predictions[, "1"])))
+      })
+    )
+  }))
+}
+```
+
+```{r}
+# Step 6: Toolbox 4 - expert-prior index, zone summaries, maps, outputs
+
+# Expert-prior index (used when there are too few precise records for a data-driven model)
+  # Each predictor is turned into a 0-1 suitability with a trapezoid (0 below a, rising to 1 at b, 1 until c, falling to 0 at d)
+  # Type "q": a-d are quantiles of the study area (NA = unbounded); type "abs": a-d are in the variable's own units
+  # Cells are combined with a weighted geometric mean
+  # ILLUSTRATIVE VALUES - to be reviewed by cheetah specialists (KWS, Tsavo Trust, ...) before use
+Cheetah.Prior <- tibble::tribble(
+  ~Variable,        ~Type, ~a,   ~b,   ~c,   ~d,   ~Weight, ~Rationale,
+  "Trees",          "abs", -Inf, -Inf, 0.10, 0.50, 2.0,     "hunts by sight: avoids closed woody cover",
+  "Shrubland",      "abs", -Inf, -Inf, 0.50, 0.95, 1.0,     "dense bush limits visibility (lenient: Tsavo is bushland)",
+  "Grassland",      "abs", 0.00, 0.20, 1.00, 1.00, 1.5,     "open grassland / savanna = hunting habitat",
+  "RPI.Mean",       "q",   0.10, 0.60, 1.00, 1.00, 1.5,     "productive rangeland supports gazelle / impala prey",
+  "Slope_deg",      "abs", -Inf, -Inf, 3.00, 15.0, 1.0,     "avoids steep, rugged ground",
+  "Pop_log10",      "q",   NA,   NA,   0.50, 0.95, 1.0,     "avoids dense human settlement",
+  "Dist_Water_km",  "abs", -Inf, -Inf, 15,   40,   0.5,     "independent of water for days: weak effect"
+)
+
+trapezoid <- function(x, a, b, c, d) {
+  ifelse(x <= a, 0, ifelse(x < b, (x - a) / (b - a), ifelse(x <= c, 1, ifelse(x < d, (d - x) / (d - c), 0))))
+}
+
+prior_hsi <- function(Cells, Prior, template) {
+  Used <- Prior[Prior$Variable %in% names(Cells), ]
+  cat("Prior uses:", paste(Used$Variable, collapse = ", "), "\n")
+
+  logs <- sapply(seq_len(nrow(Used)), function(i) {
+    p  <- Used[i, ]
+    x  <- Cells[[p$Variable]]
+    th <- unlist(p[, c("a", "b", "c", "d")])
+    if (p$Type == "q") th <- ifelse(is.na(th), -Inf, quantile(x, th, na.rm = TRUE))
+    log(pmax(trapezoid(x, th[1], th[2], th[3], th[4]), 0.01))        # floor: one poor variable does not zero a cell
+  })
+
+  r <- rast(template); values(r) <- NA
+  r[Cells$cell] <- exp(as.vector(logs %*% Used$Weight) / sum(Used$Weight))
+  names(r) <- "HSI"
+  r
+}
+
+# Mean HSI and share of area above the threshold, per management unit
+hsi_zone_summary <- function(HSI, threshold, zones, grain) {
+  bind_rows(lapply(names(zones), function(z) {
+    v <- terra::extract(HSI, vect(st_transform(zones[[z]], crs(HSI))))[[2]]
+    v <- v[!is.na(v)]
+    tibble(
+      Unit        = z,
+      Area.km2    = length(v) * (grain / 1000)^2,
+      Mean.HSI    = mean(v),
+      Median.HSI  = median(v),
+      Pct.Suitable = mean(v >= threshold) * 100,
+      Suitable.km2 = sum(v >= threshold) * (grain / 1000)^2
+    )
+  }))
+}
+
+map_hsi <- function(HSI, title, overlay = NULL, pts = NULL) {
+  m <- tm_shape(HSI) +
+    tm_raster(
+      col.scale  = tm_scale_continuous(values = "viridis", limits = c(0, 1)),
+      col.legend = tm_legend(title = "HSI", reverse = TRUE)
+    )
+  if (!is.null(overlay)) m <- m + overlay
+  if (!is.null(pts))     m <- m + tm_shape(pts) + tm_dots(fill = "red", size = 0.5)
+  m + tm_title(title) + tm_layout(legend.outside = TRUE) + tm_view(basemap.server = Basemaps)
+}
+
+save_hsm <- function(HSI, HSI.SD = NULL, binary = NULL, tag) {
+  writeRaster(HSI, file.path(HSM.Dir.Out, paste0(tag, "_HSI_mean.tif")), overwrite = TRUE)
+  if (!is.null(HSI.SD)) writeRaster(HSI.SD, file.path(HSM.Dir.Out, paste0(tag, "_HSI_sd.tif")), overwrite = TRUE)
+  if (!is.null(binary)) writeRaster(binary,  file.path(HSM.Dir.Out, paste0(tag, "_suitable.tif")), overwrite = TRUE)
+  cat("Saved to", HSM.Dir.Out, "\n")
+}
+```
+
+### 5.1 Black rhino - Tsavo West NP
+
+The presences are the occupied Rhino Range (`range_proxy`); the pseudo-absences are drawn from the rest of the park, outside the range. The result is the *similarity* of every 500 m cell to Ngulia + IPZ habitat.
+
+```{r}
+# Step 7: Rhino predictors
+
+HSM.Template.Rhino <- make_hsm_template(HSM.AOI.Rhino, HSM.Config$Grain.m, HSM.Config$CRS)
+
+HSM.Pred.Rhino <- build_hsm_predictors(
+  HSM.Template.Rhino,
+  dem_file = Data.Path("Terrain", "TsavoWest_DEM.tif"),
+  tag      = "TW"
+)
+
+# One row per 500 m cell with every predictor present
+HSM.Cells.Rhino <- as.data.frame(HSM.Pred.Rhino, cells = TRUE, xy = TRUE, na.rm = TRUE)
+cat(sprintf("Rhino model cells: %d of %d study-area cells have every predictor (%.0f%%); the rest sit on NoData gaps in the source rasters and stay NA\n",
+            nrow(HSM.Cells.Rhino), global(!is.na(HSM.Template.Rhino), "sum")[[1]], nrow(HSM.Cells.Rhino) / global(!is.na(HSM.Template.Rhino), "sum")[[1]] * 100))
+
+# Drop highly collinear predictors. Human density is left out here: inside a park it mostly encodes position (edge vs core),
+# so with 'range vs rest' presences it would only learn where the range is
+set.seed(42)
+HSM.Vars.Rhino <- drop_collinear(HSM.Cells.Rhino, setdiff(HSM.Priority, "Pop_log10"), HSM.Config$Corr.Max)
+cat("Predictors kept:", paste(HSM.Vars.Rhino, collapse = ", "), "\n")
+```
+
+```{r}
+# Step 8: Rhino presences
+
+# 8a. What does GBIF give us for black rhino here? (small, and mostly obscured - see the section introduction)
+HSM.GBIF.Rhino <- get_gbif_occurrences(
+  "Diceros bicornis", HSM.AOI.Rhino, HSM.Config$Year.Min,
+  cache_file = file.path(HSM.Dir.Species, "gbif_rhino.csv")
+)
+HSM.Clean.Rhino <- clean_occurrences(HSM.GBIF.Rhino, HSM.Template.Rhino, HSM.Config)
+print(HSM.Clean.Rhino$steps)
+
+# 8b. Presences for the model: every cell of the occupied Rhino Range
+HSM.Pres.Rhino <- range_proxy_cells(TsavoWest.Rhino.Range, HSM.Template.Rhino)
+HSM.Pres.Rhino <- intersect(HSM.Pres.Rhino, HSM.Cells.Rhino$cell)
+cat("Rhino presences (cells inside the Rhino Range):", length(HSM.Pres.Rhino), "\n")
+```
+
+```{r}
+# Step 9: Rhino model - 10 repetitions, spatial blocks of 5 km
+
+HSM.Fit.Rhino <- fit_hsm_rf(
+  HSM.Cells.Rhino, HSM.Pres.Rhino, HSM.Vars.Rhino, HSM.Template.Rhino,
+  block_km = 5, cfg = HSM.Config, pa_method = "random"
+)
+
+HSM.Fit.Rhino$Metrics |>
+  summarise(across(c(AUC.ROC, AUC.PR, Sensitivity, Specificity, TSS, Threshold), list(mean = mean, sd = sd))) |>
+  pivot_longer(everything(), names_to = c("Metric", "Stat"), names_sep = "_", values_to = "Value") |>
+  pivot_wider(names_from = Stat, values_from = Value) |>
+  print()
+```
+
+Reading the accuracy: with balanced presences and pseudo-absences, AUC-PR of about 0.5 is chance. Because the presences are one compact, managed block of habitat, a high AUC mainly says that the Rhino Range is environmentally distinct from the rest of the park; it does not validate the map as a prediction of where rhinos would choose to live.
+
+```{r}
+# Step 10: Rhino - what drives the HSI?
+
+HSM.Fit.Rhino$Importance |>
+  mutate(Variable = fct_reorder(Variable, Importance)) |>
+  ggplot(aes(Importance, Variable)) +
+  geom_col(fill = "#2c7fb8") +
+  labs(title = "Black rhino HSM - permutation importance (mean of 10 runs)", x = "Importance", y = NULL) +
+  theme_rpi()
+
+HSM.PDP.Rhino <- partial_dependence(HSM.Fit.Rhino)
+
+ggplot(HSM.PDP.Rhino, aes(Value, HSI)) +
+  geom_line(linewidth = 1, colour = "#2c7fb8") +
+  facet_wrap(~ Variable, scales = "free_x") +
+  labs(title = "Black rhino HSM - response curves", x = "Predictor value", y = "Mean HSI") +
+  theme_rpi()
+```
+
+```{r}
+# Step 11: Rhino - suitability map and the expansion question
+
+HSM.HSI.Rhino <- HSM.Fit.Rhino$HSI
+HSM.Bin.Rhino <- HSM.HSI.Rhino >= HSM.Fit.Rhino$Threshold
+
+Map.HSI.Rhino <- map_hsi(HSM.HSI.Rhino, "Black rhino habitat suitability (similarity to the Rhino Range)", overlay = TW.Overlay)
+Map.HSI.Rhino
+
+# Suitability per zone: does the expansion zone hold Rhino-Range-like habitat?
+HSM.Summary.Rhino <- hsi_zone_summary(HSM.HSI.Rhino, HSM.Fit.Rhino$Threshold, HSM.Zones.Rhino, HSM.Config$Grain.m)
+print(HSM.Summary.Rhino)
+```
+
+```{r}
+# Step 12: Rhino - candidate expansion areas
+  # Two views of the expansion zone, both limited to cells within 5 km of water (the water-access limit from Section 4B):
+  #   Rhino-Range-like  = HSI above the model threshold
+  #   Relatively best   = top 20% of HSI inside the expansion zone (useful because few cells pass the threshold)
+
+Expansion.Zone <- vect(st_transform(TsavoWest.Excl.RhinoRange, crs(HSM.HSI.Rhino)))
+HSI.Expansion  <- mask(HSM.HSI.Rhino, Expansion.Zone)
+
+Water.OK <- if ("Dist_Water_km" %in% names(HSM.Pred.Rhino)) HSM.Pred.Rhino[["Dist_Water_km"]] <= 5 else HSI.Expansion >= 0
+Top20.Threshold <- quantile(values(HSI.Expansion), 0.80, na.rm = TRUE)[[1]]
+
+HSM.Candidates.Rhino <- ifel(HSI.Expansion >= HSM.Fit.Rhino$Threshold & Water.OK, 2,
+                        ifel(HSI.Expansion >= Top20.Threshold & Water.OK, 1, NA))
+names(HSM.Candidates.Rhino) <- "Candidate"
+
+Cell.km2 <- (HSM.Config$Grain.m / 1000)^2
+
+Candidate.Summary <- tibble(
+  Class = c("Rhino-Range-like (HSI >= model threshold)", "Relatively best 20% of the expansion zone"),
+  Cells = c(global(HSM.Candidates.Rhino == 2, "sum", na.rm = TRUE)[[1]],
+            global(HSM.Candidates.Rhino == 1, "sum", na.rm = TRUE)[[1]])
+) |>
+  mutate(Area.km2 = Cells * Cell.km2)
+
+cat(sprintf("Expansion zone modelled: %.0f km2 | model threshold: %.2f | top-20%% cut-off: %.2f\n",
+            global(!is.na(HSI.Expansion), "sum")[[1]] * Cell.km2, HSM.Fit.Rhino$Threshold, Top20.Threshold))
+print(Candidate.Summary)
+
+tm_shape(HSM.Candidates.Rhino) +
+  tm_raster(
+    col.scale  = tm_scale_categorical(values = c("1" = "#fdae61", "2" = "darkgreen"),
+                                      labels = c("Relatively best 20%", "Rhino-Range-like"), value.na = NA),
+    col.legend = tm_legend(title = "Expansion habitat")
+  ) +
+  TW.Overlay +
+  tm_title("Candidate rhino expansion habitat (within 5 km of water)") +
+  tm_layout(legend.outside = TRUE) +
+  tm_view(basemap.server = Basemaps)
+
+save_hsm(HSM.HSI.Rhino, HSM.Fit.Rhino$HSI.SD, HSM.Bin.Rhino, tag = "rhino_TsavoWest")
+write_csv(HSM.Fit.Rhino$Metrics, file.path(HSM.Dir.Out, "rhino_TsavoWest_metrics.csv"))
+write_csv(HSM.Summary.Rhino,     file.path(HSM.Dir.Out, "rhino_TsavoWest_zone_summary.csv"))
+write_csv(Candidate.Summary,     file.path(HSM.Dir.Out, "rhino_TsavoWest_expansion_candidates.csv"))
+```
+
+### 5.2 Cheetah - Tsavo Conservation Area
+
+Cheetahs range widely across park boundaries, so the study area is the whole TCA (Kenya side). Precise cheetah records are the limiting factor: drop a CSV with `lon`, `lat` (and `year`, `uncertainty_m`) into `data/Species/cheetah_occurrences.csv` and the data-driven model switches on automatically once at least `Min.Presences` cleaned records are available. Until then the expert-prior index is mapped, and the few precise GBIF records are used as a reality check.
+
+```{r}
+# Step 13: Cheetah predictors
+
+HSM.Template.Cheetah <- make_hsm_template(HSM.AOI.Cheetah, HSM.Config$Grain.m, HSM.Config$CRS)
+
+# The DEM for the whole TCA is downloaded once (SRTM via elevatr, ~300 m) and cached
+HSM.DEM.TCA <- Data.Path("Terrain", "TCA_DEM.tif")
+
+if (!file.exists(HSM.DEM.TCA)) {
+  cat("Downloading SRTM DEM for the Tsavo Conservation Area...\n")
+  HSM.DEM.Raw <- elevatr::get_elev_raster(locations = st_transform(HSM.AOI.Cheetah, 4326), z = 9, clip = "bbox")
+  writeRaster(rast(HSM.DEM.Raw), HSM.DEM.TCA, overwrite = TRUE)
+}
+
+HSM.Pred.Cheetah <- build_hsm_predictors(HSM.Template.Cheetah, dem_file = HSM.DEM.TCA, tag = "TCA")
+
+HSM.Cells.Cheetah <- as.data.frame(HSM.Pred.Cheetah, cells = TRUE, xy = TRUE, na.rm = TRUE)
+cat(sprintf("Cheetah model cells: %d of %d study-area cells have every predictor (%.0f%%); the rest are NA (e.g. non-rangeland in StudyPixels)\n",
+            nrow(HSM.Cells.Cheetah), global(!is.na(HSM.Template.Cheetah), "sum")[[1]], nrow(HSM.Cells.Cheetah) / global(!is.na(HSM.Template.Cheetah), "sum")[[1]] * 100))
+
+set.seed(42)
+HSM.Vars.Cheetah <- drop_collinear(HSM.Cells.Cheetah, HSM.Priority, HSM.Config$Corr.Max)
+cat("Predictors kept:", paste(HSM.Vars.Cheetah, collapse = ", "), "\n")
+```
+
+```{r}
+# Step 14: Cheetah presences - supplied records first, otherwise GBIF
+
+HSM.Occ.File.Cheetah <- file.path(HSM.Dir.Species, "cheetah_occurrences.csv")
+
+if (file.exists(HSM.Occ.File.Cheetah)) {
+  HSM.Occ.Cheetah <- read_supplied_occurrences(HSM.Occ.File.Cheetah)
+  cat("Using supplied records:", HSM.Occ.File.Cheetah, "\n")
+} else {
+  HSM.Occ.Cheetah <- get_gbif_occurrences(
+    "Acinonyx jubatus", HSM.AOI.Cheetah, HSM.Config$Year.Min,
+    cache_file = file.path(HSM.Dir.Species, "gbif_cheetah.csv")
+  )
+  cat("No supplied records found - using GBIF\n")
+}
+
+HSM.Clean.Cheetah <- clean_occurrences(HSM.Occ.Cheetah, HSM.Template.Cheetah, HSM.Config)
+print(HSM.Clean.Cheetah$steps)
+
+HSM.Pres.Cheetah <- intersect(HSM.Clean.Cheetah$points$cell, HSM.Cells.Cheetah$cell)
+HSM.Mode.Cheetah <- if (length(HSM.Pres.Cheetah) >= HSM.Config$Min.Presences) "occurrences" else "prior"
+cat(sprintf("Precise presences available: %d (minimum %d) -> mode: %s\n",
+            length(HSM.Pres.Cheetah), HSM.Config$Min.Presences, HSM.Mode.Cheetah))
+```
+
+```{r}
+# Step 15: Cheetah model
+  # 'occurrences' -> random forest with spatial-block cross-validation (same engine as the rhino)
+  # 'prior'       -> expert-prior index (Cheetah.Prior, Step 6)
+
+if (HSM.Mode.Cheetah == "occurrences") {
+
+  HSM.Fit.Cheetah <- fit_hsm_rf(
+    HSM.Cells.Cheetah, HSM.Pres.Cheetah, HSM.Vars.Cheetah, HSM.Template.Cheetah,
+    block_km = 20, cfg = HSM.Config, pa_method = "random"
+  )
+  HSM.HSI.Cheetah <- HSM.Fit.Cheetah$HSI
+  HSM.Thr.Cheetah <- HSM.Fit.Cheetah$Threshold
+  print(summarise(HSM.Fit.Cheetah$Metrics, across(c(AUC.ROC, AUC.PR, TSS), mean)))
+
+} else {
+
+  HSM.HSI.Cheetah <- prior_hsi(HSM.Cells.Cheetah, Cheetah.Prior, HSM.Template.Cheetah)
+
+  # No validated threshold exists in this mode: 'suitable' = the best third of the study area
+  HSM.Thr.Cheetah <- quantile(values(HSM.HSI.Cheetah), 0.67, na.rm = TRUE)[[1]]
+  cat(sprintf("EXPERT-PRIOR MODE: HSI is illustrative and unvalidated; 'suitable' = HSI >= %.2f (top third)\n", HSM.Thr.Cheetah))
+
+  # Reality check: where do the precise records fall on the HSI distribution? (0.5 = no better than chance)
+  if (!is.null(HSM.Clean.Cheetah$points) && nrow(HSM.Clean.Cheetah$points) > 0) {
+    at.pts <- terra::extract(HSM.HSI.Cheetah, vect(HSM.Clean.Cheetah$points))[[2]]
+    cat(sprintf("Reality check: %d precise records sit, on average, at percentile %.0f of the HSI distribution (50 = chance)\n",
+                sum(!is.na(at.pts)), mean(ecdf(values(HSM.HSI.Cheetah))(at.pts), na.rm = TRUE) * 100))
+  }
+}
+
+HSM.Bin.Cheetah <- HSM.HSI.Cheetah >= HSM.Thr.Cheetah
+```
+
+```{r}
+# Step 16: Cheetah - suitability map and suitability per management unit
+
+TCA.Overlay <- tm_shape(HSM.Zones.Cheetah.sf) +
+  tm_polygons(fill = "white", fill_alpha = 0, col = "black", lwd = 1.5, id = "NAME")
+
+Map.HSI.Cheetah <- map_hsi(
+  HSM.HSI.Cheetah,
+  paste0("Cheetah habitat suitability - Tsavo Conservation Area (", HSM.Mode.Cheetah, " mode)"),
+  overlay = TCA.Overlay
+)
+Map.HSI.Cheetah
+
+HSM.Summary.Cheetah <- hsi_zone_summary(HSM.HSI.Cheetah, HSM.Thr.Cheetah, HSM.Zones.Cheetah, HSM.Config$Grain.m)
+print(HSM.Summary.Cheetah)
+
+save_hsm(HSM.HSI.Cheetah, binary = HSM.Bin.Cheetah, tag = paste0("cheetah_TCA_", HSM.Mode.Cheetah))
+write_csv(HSM.Summary.Cheetah, file.path(HSM.Dir.Out, paste0("cheetah_TCA_", HSM.Mode.Cheetah, "_zone_summary.csv")))
+```
+
+### 5.3 Exporting extra predictors from Google Earth Engine (optional)
+
+The models above run on the layers already in this project. Rainfall (CHIRPS), vegetation greenness (MODIS NDVI) and surface-water distance (JRC) are exported from GEE with `scripts/gee/01_TCA_HSM_predictors_export.js`, using the same convention as the Amaka and Kitobo projects:
+
+1. Open the script in the GEE Code Editor (account `ee-imnduta1`) and save it as `users/imnduta1/Ismurn/TsavoHSM/01_TCA_HSM_predictors_export`.
+2. Run it: it queues three `Export.image.toDrive` tasks (EPSG:32737, each product at its native scale, `maxPixels` 1e10, GeoTIFF). Start each from the **Tasks** tab.
+3. The files appear in the Drive folder `TsavoHSM_GEE_Exports/`. Download them into `data/gee_exports/`.
+4. Re-run Steps 7 and 13: `build_hsm_predictors()` picks the files up automatically (adds rainfall, rainfall variability, NDVI, and replaces the stream-based water distance with distance to JRC surface water).
+
+### 5.4 Next steps
+
+- **Real cheetah and rhino records** (KWS / AWF / SMART / camera traps / collars) are the biggest upgrade: they switch both species to a fully data-driven, validated model.
+- **Movement and connectivity**: the cheetah HSI can be inverted into a resistance surface (`1 - HSI`) for least-cost corridors between the parks (`gdistance` or `circuitscape`).
+- **Time**: the GEE case study 2 matches each record to the closest-in-time image. The RPI stack has 23 yearly layers, so the same idea can be applied here once records have dates.
