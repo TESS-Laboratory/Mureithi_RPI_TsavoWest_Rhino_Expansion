@@ -48,3 +48,8 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 .positai
+
+# Species records (precise rhino/cheetah locations are sensitive), GEE downloads and model outputs
+data/Species/
+data/gee_exports/
+outputs/

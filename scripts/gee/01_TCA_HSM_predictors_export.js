@@ -1,6 +1,5 @@
 /**
  * 01_TCA_HSM_predictors_export.js
- * ----------------------------------------------------------------------------
  * Project : Tsavo West Rhino Expansion + Tsavo cheetah - Habitat Suitability Models
  * Author  : Isaac Mureithi (AWF / OPALS, Univ. of Exeter)
  * Written : 2026-10-28      GEE account: ee-imnduta1

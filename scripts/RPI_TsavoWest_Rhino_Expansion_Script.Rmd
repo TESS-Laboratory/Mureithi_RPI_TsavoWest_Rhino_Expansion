@@ -1838,6 +1838,24 @@ Point-sampling all variables at RPI pixel locations
 Eliminates coordinate mismatch from different raster grids
 
 ```{r}
+# Step 0: Collapse RPI pixels to mean per pixel
+  # Average across all hydrological years per pixel
+    # This gives one representative RPI value per spatial location
+
+RPI.Pixel.Mean <- RPI.All.Zones.Pixels |>
+  group_by(ZONE, x, y) |>
+  summarise(
+    Mean.RPI    = mean(RPI,    na.rm = TRUE),
+    Median.RPI  = median(RPI,  na.rm = TRUE),
+    SD.RPI      = sd(RPI,      na.rm = TRUE),
+    CV.RPI      = sd(RPI, na.rm = TRUE) / mean(RPI, na.rm = TRUE), # Coefficient of variation
+    .groups     = "drop"
+  )
+
+cat("Pixel-level mean RPI table dimensions:", dim(RPI.Pixel.Mean), "\n")
+```
+
+```{r}
 # Step 1: Get unique RPI pixel centroids as a SpatVector
   # These become the master sampling locations for everything
 
@@ -3500,7 +3518,8 @@ drop_collinear <- function(Cells, priority, r_max, n_sample = 5000) {
 }
 
 HSM.Priority <- c("RPI.Mean", "Shrubland", "Grassland", "Trees", "Bare", "Dist_Water_km", "Slope_deg", "Elevation_m",
-                  "TRI", "Pop_log10", "RPI.CV", "GPP", "Ec", "Es")
+                  "TRI", "Pop_log10", "RPI.CV", "GPP", "Ec", "Es",
+                  "rain_annual_mm", "rain_dry_mm", "rain_cv", "ndvi_dry_mean", "ndvi_mean")   # GEE layers: used once downloaded (5.3)
 ```
 
 ```{r}
@@ -3806,9 +3825,10 @@ cat(sprintf("Rhino model cells: %d of %d study-area cells have every predictor (
             nrow(HSM.Cells.Rhino), global(!is.na(HSM.Template.Rhino), "sum")[[1]], nrow(HSM.Cells.Rhino) / global(!is.na(HSM.Template.Rhino), "sum")[[1]] * 100))
 
 # Drop highly collinear predictors. Human density is left out here: inside a park it mostly encodes position (edge vs core),
-# so with 'range vs rest' presences it would only learn where the range is
+# so with 'range vs rest' presences it would only learn where the range is. The 5.5 km CHIRPS rainfall layers are left out for the
+# same reason (only ~2 pixels cover the whole Rhino Range, so rainfall would just mark its position)
 set.seed(42)
-HSM.Vars.Rhino <- drop_collinear(HSM.Cells.Rhino, setdiff(HSM.Priority, "Pop_log10"), HSM.Config$Corr.Max)
+HSM.Vars.Rhino <- drop_collinear(HSM.Cells.Rhino, setdiff(HSM.Priority, c("Pop_log10", "rain_annual_mm", "rain_dry_mm", "rain_cv")), HSM.Config$Corr.Max)
 cat("Predictors kept:", paste(HSM.Vars.Rhino, collapse = ", "), "\n")
 ```
 
