@@ -4057,10 +4057,7 @@ write_csv(HSM.Summary.Cheetah, file.path(HSM.Dir.Out, paste0("cheetah_TCA_", HSM
 
 The models above run on the layers already in this project. Rainfall (CHIRPS), vegetation greenness (MODIS NDVI) and surface-water distance (JRC) are exported from GEE with `scripts/gee/01_TCA_HSM_predictors_export.js`, using the same convention as the Amaka and Kitobo projects:
 
-1. Open the script in the GEE Code Editor (account `ee-imnduta1`) and save it as `users/imnduta1/Ismurn/TsavoHSM/01_TCA_HSM_predictors_export`.
-2. Run it: it queues three `Export.image.toDrive` tasks (EPSG:32737, each product at its native scale, `maxPixels` 1e10, GeoTIFF). Start each from the **Tasks** tab.
-3. The files appear in the Drive folder `TsavoHSM_GEE_Exports/`. Download them into `data/gee_exports/`.
-4. Re-run Steps 7 and 13: `build_hsm_predictors()` picks the files up automatically (adds rainfall, rainfall variability, NDVI, and replaces the stream-based water distance with distance to JRC surface water).
+Once you run the GEE script, the files appear in the Drive folder `TsavoHSM_GEE_Exports/`. Download them into `data/gee_exports/`.Re-run Steps 7 and 13: `build_hsm_predictors()` picks the files up automatically (adds rainfall, rainfall variability, NDVI, and replaces the stream-based water distance with distance to JRC surface water).
 
 ### 5.4 Next steps
 
