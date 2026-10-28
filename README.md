@@ -2,9 +2,9 @@
 
 This repository contains the data and code used to reproduce the analyses, figures and tables presented in:
 
-[Mureithi I.N., Author B. & Author C. (Year). Title. Journal / thesis / report. DOI: https://doi.org/... — to be added]
+[Mureithi I.N., Author B. & Author C. (Year). Title. Journal / thesis / report. DOI: https://doi.org/... - to be added]
 
-A permanent version of this repository is archived at [DOI — to be added once a release is archived, e.g. on Zenodo]
+A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]
 
 Use of this code is licensed under Licence: [![Licence: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0).
 
