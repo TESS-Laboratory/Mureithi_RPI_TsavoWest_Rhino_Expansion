@@ -1,3 +1,10 @@
+---
+author: "Isaac Nduta Mureithi"
+output:
+  html_document: default
+  word_document: default
+  always_allow_html: true
+---
 ```{r}
 # Load libraries
 
