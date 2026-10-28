@@ -51,4 +51,4 @@ The analysis uses libraries including sf, terra, tidyverse, tmap, trend, and sli
 •Water Proximity (Stream & Dist_to_Water_km): a binary seasonal drainage network (mapping crucial ephemeral luggas) paired with a continuous distance matrix tracking exact kilometer proximity to the nearest water security line—a primary driver for black rhino ranging patterns.
 
 **Data Provenance**
-The reproducible code is available on GitHub under a [e.g., MIT or GNU GPL V3] license. National Park and Sanctuary boundaries were sourced from [Source, e.g., KWS/WDPA]. The RPI datasets are attributed to Guy Lomax (University of Exeter/TESS Lab).
+The reproducible code is available on GitHub under a [![Licence: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) license. National Park and Sanctuary boundaries were sourced from [Source, e.g., KWS/WDPA]. The RPI datasets are attributed to Guy Lomax (University of Exeter/TESS Lab).
