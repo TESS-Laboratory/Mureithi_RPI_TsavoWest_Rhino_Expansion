@@ -4050,7 +4050,7 @@ HSM.Summary.Cheetah <- hsi_zone_summary(HSM.HSI.Cheetah, HSM.Thr.Cheetah, HSM.Zo
 print(HSM.Summary.Cheetah)
 
 save_hsm(HSM.HSI.Cheetah, binary = HSM.Bin.Cheetah, tag = paste0("cheetah_TCA_", HSM.Mode.Cheetah))
-write_csv(HSM.Summary.Cheetah, file.path(HSM.Dir.Out, paste0("cheetah_TCA_", HSM.Mode.Cheetah, "_zone_summary.csv")))
+write_csv(HSM.Summary.Cheetah, file.path(HSM.Dir.Out, paste0("cheetah_TCA_", HSM.Mode.Cheetah, "_zone_summary.csv"))) 
 ```
 
 ### 5.3 Exporting extra predictors from Google Earth Engine (optional)
