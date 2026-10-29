@@ -20,10 +20,10 @@ This project asks whether Tsavo West National Park (Kenya) can support an expans
 
 | Script | Description |
 |---|---|
-| *scripts/RPI_TsavoWest_Rhino_Expansion_Script.Rmd* | The full workflow as one R Markdown file, organised in sections (table below). Run its chunks in order. |
+| *scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd* | The full workflow as one R Markdown file, organised in sections (table below). Run its chunks in order. |
 | *scripts/gee/01_TCA_HSM_predictors_export.js* | Google Earth Engine script that exports CHIRPS rainfall, MODIS NDVI and JRC surface-water layers to Google Drive for Section 5. Optional; run it first if you want these predictors. |
 
-Sections of *RPI_TsavoWest_Rhino_Expansion_Script.Rmd*:
+Sections of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*:
 
 | Section | Description |
 |---|---|
@@ -86,8 +86,8 @@ renv::restore()
 ## Running the analysis
 
 1. (Optional) Run *scripts/gee/01_TCA_HSM_predictors_export.js* in the Google Earth Engine Code Editor and start each export task from the Tasks tab. Download the files from the Drive folder *TsavoHSM_GEE_Exports* into *data/gee_exports/*. Without them, Section 5 runs on the layers already in the project.
-2. Edit the three absolute raster paths (RPI, PML_V2, StudyPixels) in the data-import chunks of *RPI_TsavoWest_Rhino_Expansion_Script.Rmd*.
-3. Run the chunks of *RPI_TsavoWest_Rhino_Expansion_Script.Rmd* in order from the top. Later sections use objects created earlier. WhiteboxTools downloads its binary (about 50 MB) on first use, and the terrain and hydrology processing in Section 4B is the slowest step.
+2. Edit the three absolute raster paths (RPI, PML_V2, StudyPixels) in the data-import chunks of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*.
+3. Run the chunks of *Mureithi_Tsavo_Habitat_Intelligence.Rmd* in order from the top. Later sections use objects created earlier. WhiteboxTools downloads its binary (about 50 MB) on first use, and the terrain and hydrology processing in Section 4B is the slowest step.
 
 ## Funding and acknowledgements
 
