@@ -2,17 +2,17 @@
 
 This repository contains the data and code used to reproduce the analyses, figures and tables presented in:
 
-[Mureithi I.N., Author B. & Author C. (Year). Title. Journal / thesis / report. DOI: https://doi.org/... — to be added]
+[Mureithi I.N., Author B. & Author C. (Year). Title. Journal / thesis / report. DOI: https://doi.org/... - to be added]
 
-A permanent version of this repository is archived at [DOI — to be added once a release is archived, e.g. on Zenodo]
+A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]
 
-Use of this code is licensed under Licence: GPL v3 (see *LICENSE*).
+Use of this code is licensed under Licence: [![Licence: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0).
 
-Contact Isaac Nduta Mureithi at [EMAIL] (ORCID: [ORCID iD]).
+Contact Isaac Nduta Mureithi at [IMureithi@awf.org / I.N.Mureithi@exeter.ac.uk] (ORCID: [[ORCID iD](https://orcid.org/0009-0009-2318-2568)]).
 
 ## Project overview
 
-This project asks whether Tsavo West National Park (Kenya) can support an expansion of its black rhino (*Diceros bicornis*) population beyond the current Rhino Range (Ngulia Sanctuary and the Intensive Protection Zone, IPZ). It combines the Relative Productivity Index (RPI, developed by Guy Lomax, University of Exeter/TESS Lab) with PML_V2 water-energy fluxes, land cover, terrain and hydrology to explain the productivity gap between the managed Rhino Range and the rest of the park, and then builds habitat suitability models for black rhino (Tsavo West) and cheetah (*Acinonyx jubatus*, Tsavo Conservation Area). The repository holds the R workflow, the supporting boundary and terrain data, and a Google Earth Engine script for additional predictors. The work was developed by Isaac Nduta Mureithi through the African Wildlife Foundation – University of Exeter partnership.
+This project asks whether Tsavo West National Park (Kenya) can support an expansion of its black rhino (*Diceros bicornis*) population beyond the current Rhino Range (Ngulia Sanctuary and the Intensive Protection Zone, IPZ). It combines the Relative Productivity Index (RPI, developed by Guy Lomax, University of Exeter/TESS Lab) with PML_V2 water-energy fluxes, land cover, terrain and hydrology to explain the productivity gap between the managed Rhino Range and the rest of the park, and then builds habitat suitability models for black rhino (Tsavo West) and cheetah (*Acinonyx jubatus*, Tsavo Conservation Area). The repository holds the R workflow, the supporting boundary and terrain data, and a Google Earth Engine script for additional predictors. The work was developed by Isaac Nduta Mureithi through the African Wildlife Foundation - University of Exeter partnership.
 
 ## Repository contents
 
@@ -91,8 +91,8 @@ renv::restore()
 
 ## Funding and acknowledgements
 
-[Funding acknowledgement, e.g. African Wildlife Foundation / University of Exeter — to be confirmed.]
+[Nature Path grant to African Wildlife Foundation.]
 
-RPI datasets: Guy Lomax (University of Exeter/TESS Lab). Park boundaries: World Database on Protected Areas (WDPA, April 2025). Rhino Range boundaries (Ngulia Sanctuary and the Intensive Protection Zone): [source, e.g. KWS / Tsavo Conservation Area — to be confirmed].
+RPI datasets: Guy Lomax (University of Exeter/TESS Lab). Park boundaries: World Database on Protected Areas (WDPA, April 2025). Rhino Range boundaries (Ngulia Sanctuary and the Intensive Protection Zone): [source, e.g. Kenya Wildlife Service; Taita Taveta Wildlife Conservancies Association].
 
 Other data and methods: PML_V2 (Zhang et al., 2019); CHIRPS (Funk et al., 2015); MODIS MOD13Q1 v061 (Didan, 2021); JRC Global Surface Water (Pekel et al., 2016); species records from GBIF (www.gbif.org), including iNaturalist research-grade observations (CC BY-NC); modelling approach after Crego, Stabach & Connette (2022), *Diversity and Distributions*.
