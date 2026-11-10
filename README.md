@@ -21,7 +21,7 @@ This project asks whether Tsavo West National Park (Kenya) can support an expans
 | *scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd* | The full workflow as one R Markdown file, organised in sections (table below). Run its chunks in order. |
 | *scripts/gee/01_TCA_HSM_predictors_export.js* | Google Earth Engine script that exports CHIRPS rainfall, MODIS NDVI and JRC surface-water layers to Google Drive for Section 5. Optional; run it first if you want these predictors. |
 | *scripts/Report_Assets.R* | Runs the analysis script and exports every figure (report/figures), result table and a reproducibility record (report/results) that the report reads. |
-| *report/Tsavo_HSM_Report.Rmd* The report (Word and HTML). Every figure has a caption, numbers are computed from report/results, and the knit stops if a figure has no caption. Citations are in report/references.bib. |
+| *report/Tsavo_HSM_Report.Rmd* | The report (Word and HTML). Every figure has a caption, numbers are computed from report/results, and the knit stops if a figure has no caption. Citations are in report/references.bib. |
 
 Sections of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*:
 
