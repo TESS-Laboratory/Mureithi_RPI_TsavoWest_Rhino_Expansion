@@ -2364,12 +2364,12 @@ Fig4.4.Shrub.Profiles <- ggplot(
 
   # Annotate pixel counts per bin per zone
   stat_summary(
-    aes(label = after_stat(paste0("n=", scales::comma(y)))),
-    fun       = function(x) quantile(x, 0.95),
+    fun.data  = function(x) data.frame(y = 1.56, label = paste0("n=", scales::comma(length(x)))),   # n = number of pixels in the class
+    # the labels sit at the top of each panel, above the violins
     geom      = "text",
     size      = 2.4,
     colour    = "grey40",
-    vjust     = -0.3,
+    vjust     = 0.5,
     fun.args  = list()
   ) +
 
@@ -3540,9 +3540,10 @@ get_gbif_occurrences <- function(latin, aoi_sf, year_min, cache_file, refresh = 
   if (file.exists(cache_file) && !refresh) return(readr::read_csv(cache_file, show_col_types = FALSE))
 
   bb  <- st_bbox(st_transform(aoi_sf, 4326))
-  key <- rgbif::name_backbone(name = latin, rank = "species")$usageKey
+  # Search by scientific name (the backbone resolves synonyms). Looking up a taxon key with name_backbone() first
+  # stopped working with rgbif 3.9.0, which returns a new-style key (e.g. "35JVB") that occ_data() does not accept
   res <- rgbif::occ_data(
-    taxonKey           = key,
+    scientificName     = latin,
     geometry           = rgbif::gbif_bbox2wkt(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]]),
     hasCoordinate      = TRUE,
     hasGeospatialIssue = FALSE,
@@ -3551,7 +3552,10 @@ get_gbif_occurrences <- function(latin, aoi_sf, year_min, cache_file, refresh = 
     limit              = 5000
   )
   d <- res$data
-  if (is.null(d) || nrow(d) == 0) return(tibble())
+  if (is.null(d) || nrow(d) == 0) {
+    warning("GBIF returned no records for ", latin, " - check the internet connection and the rgbif version", call. = FALSE)
+    return(tibble())
+  }
 
   for (n in c("year", "basisOfRecord", "coordinateUncertaintyInMeters", "issues", "informationWithheld", "datasetName")) {
     if (!n %in% names(d)) d[[n]] <- NA
@@ -3779,7 +3783,8 @@ prior_hsi <- function(Cells, Prior, template) {
 # Mean HSI and share of area above the threshold, per management unit
 hsi_zone_summary <- function(HSI, threshold, zones, grain) {
   bind_rows(lapply(names(zones), function(z) {
-    v <- terra::extract(HSI, vect(st_transform(zones[[z]], crs(HSI))))[[2]]
+    # Dissolve first: the Rhino Range holds two overlapping polygons (Ngulia lies inside the IPZ), so cells would be counted twice
+    v <- terra::extract(HSI, vect(st_union(st_transform(zones[[z]], crs(HSI)))))[[2]]
     v <- v[!is.na(v)]
     tibble(
       Unit        = z,
@@ -3913,7 +3918,7 @@ print(HSM.Summary.Rhino)
   #   Relatively best   = top 20% of HSI inside the expansion zone (useful because few cells pass the threshold)
 
 Expansion.Zone <- vect(st_transform(TsavoWest.Excl.RhinoRange, crs(HSM.HSI.Rhino)))
-HSI.Expansion  <- mask(HSM.HSI.Rhino, Expansion.Zone)
+HSI.Expansion  <- mask(HSM.HSI.Rhino, Expansion.Zone, touches = FALSE)   # cells whose centre lies inside the zone (same rule as hsi_zone_summary)
 
 Water.OK <- if ("Dist_Water_km" %in% names(HSM.Pred.Rhino)) HSM.Pred.Rhino[["Dist_Water_km"]] <= 5 else HSI.Expansion >= 0
 Top20.Threshold <- quantile(values(HSI.Expansion), 0.80, na.rm = TRUE)[[1]]
