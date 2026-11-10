@@ -1,0 +1,3 @@
+"Water.Layer","Predictors","AUC.ROC","AUC.PR","Threshold","Mean.HSI.Expansion.Zone","Expansion.Zone.above.threshold.km2","Candidate.RangeLike.km2","Candidate.Best20.km2","Cells.within.5km.of.water.in.expansion.zone.km2"
+"JRC surface water (Section 5 default)","RPI.Mean, Shrubland, Trees, Bare, Dist_Water_km, Slope_deg, Elevation_m, RPI.CV, Es",0.963098,0.962215661352797,0.47,0.156100537612048,234,39,130.25,1458
+"WhiteboxTools stream network (Section 4B)","RPI.Mean, Shrubland, Trees, Bare, Dist_Water_km, Slope_deg, Elevation_m, RPI.CV, Es",0.953867375,0.952838941425749,0.496,0.174415885673674,256.75,208.5,414.75,3168

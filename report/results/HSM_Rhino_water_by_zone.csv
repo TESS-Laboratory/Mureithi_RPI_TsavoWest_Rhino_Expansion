@@ -1,0 +1,11 @@
+"Water.Layer","Unit","Cells","Mean.Dist.km","Median.Dist.km","Pct.Within.2km","Pct.Within.5km"
+"JRC surface water (Section 5 default)","Tsavo West NP",28135,10.1424171110602,9.192388671875,8.68313488537409,26.3906166696286
+"JRC surface water (Section 5 default)","Rhino Range (Ngulia + IPZ)",12102,12.2981546066604,11.9058623046875,4.08196992232689,13.1631135349529
+"JRC surface water (Section 5 default)","Ngulia Sanctuary",407,18.3810224345439,18.506755859375,0,0
+"JRC surface water (Section 5 default)","Intensive Protection Zone",12102,12.2981546066604,11.9058623046875,4.08196992232689,13.1631135349529
+"JRC surface water (Section 5 default)","Tsavo West (excl. Rhino Range)",16033,8.51522724193058,6.9462216796875,12.1561778831161,36.3749766107403
+"WhiteboxTools stream network (Section 4B)","Tsavo West NP",28135,2.96986466422796,2.52347946166992,41.1693620046206,81.5567798116225
+"WhiteboxTools stream network (Section 4B)","Rhino Range (Ngulia + IPZ)",12102,2.78342530511626,2.45001935958862,42.0922161626178,84.8950586679888
+"WhiteboxTools stream network (Section 4B)","Ngulia Sanctuary",407,2.73117327759688,2.48544502258301,39.0663390663391,85.995085995086
+"WhiteboxTools stream network (Section 4B)","Intensive Protection Zone",12102,2.78342530511626,2.45001935958862,42.0922161626178,84.8950586679888
+"WhiteboxTools stream network (Section 4B)","Tsavo West (excl. Rhino Range)",16033,3.11059248334914,2.57904458045959,40.4727749017651,79.0369862159296

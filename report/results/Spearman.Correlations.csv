@@ -1,0 +1,36 @@
+"ZONE","Variable","Spearman.r"
+"Tsavo West NP","Shrubland (%)",0.0304627541577087
+"Tsavo West NP","Grassland (%)",-0.0769729030934409
+"Tsavo West NP","Tree Cover (%)",0.189261562656496
+"Tsavo West NP","Bare Ground (%)",-0.136381355342874
+"Tsavo West NP","GPP (gC/m²/yr)",0.702880024513658
+"Tsavo West NP","Canopy Transpiration",0.685646899670498
+"Tsavo West NP","Soil Evaporation",-0.644873969421247
+"Tsavo West (excl. Rhino Range)","Shrubland (%)",-0.00488251571144753
+"Tsavo West (excl. Rhino Range)","Grassland (%)",0.0167569443169479
+"Tsavo West (excl. Rhino Range)","Tree Cover (%)",-0.0315863060658427
+"Tsavo West (excl. Rhino Range)","Bare Ground (%)",-0.220810375359766
+"Tsavo West (excl. Rhino Range)","GPP (gC/m²/yr)",0.705845502767884
+"Tsavo West (excl. Rhino Range)","Canopy Transpiration",0.685937363715463
+"Tsavo West (excl. Rhino Range)","Soil Evaporation",-0.602226028993782
+"Rhino Range (Ngulia + IPZ)","Shrubland (%)",-0.136992526661271
+"Rhino Range (Ngulia + IPZ)","Grassland (%)",0.031599334968622
+"Rhino Range (Ngulia + IPZ)","Tree Cover (%)",0.219517306969891
+"Rhino Range (Ngulia + IPZ)","Bare Ground (%)",-0.121767661625618
+"Rhino Range (Ngulia + IPZ)","GPP (gC/m²/yr)",0.689738346767741
+"Rhino Range (Ngulia + IPZ)","Canopy Transpiration",0.674212866254279
+"Rhino Range (Ngulia + IPZ)","Soil Evaporation",-0.645964403616585
+"Ngulia Sanctuary","Shrubland (%)",-0.330073585985227
+"Ngulia Sanctuary","Grassland (%)",0.321241031061568
+"Ngulia Sanctuary","Tree Cover (%)",0.169620797162688
+"Ngulia Sanctuary","Bare Ground (%)",-0.24255708566209
+"Ngulia Sanctuary","GPP (gC/m²/yr)",0.547313282346626
+"Ngulia Sanctuary","Canopy Transpiration",0.560840730268941
+"Ngulia Sanctuary","Soil Evaporation",-0.535172181678869
+"Intensive Protection Zone","Shrubland (%)",-0.136992526661271
+"Intensive Protection Zone","Grassland (%)",0.031599334968622
+"Intensive Protection Zone","Tree Cover (%)",0.219517306969891
+"Intensive Protection Zone","Bare Ground (%)",-0.121767661625618
+"Intensive Protection Zone","GPP (gC/m²/yr)",0.689738346767741
+"Intensive Protection Zone","Canopy Transpiration",0.674212866254279
+"Intensive Protection Zone","Soil Evaporation",-0.645964403616585

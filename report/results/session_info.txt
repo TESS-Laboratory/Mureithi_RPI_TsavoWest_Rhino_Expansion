@@ -1,0 +1,61 @@
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_United Kingdom.utf8 
+[2] LC_CTYPE=English_United Kingdom.utf8   
+[3] LC_MONETARY=English_United Kingdom.utf8
+[4] LC_NUMERIC=C                           
+[5] LC_TIME=English_United Kingdom.utf8    
+
+time zone: Africa/Nairobi
+tzcode source: internal
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] ranger_0.18.0     rgbif_3.9.0       whitebox_2.4.3    elevatr_0.99.1   
+ [5] scico_1.5.0       hexbin_1.28.5     scales_1.3.0      viridis_0.6.5    
+ [9] viridisLite_0.4.2 slider_0.3.2      trend_1.1.6       tidyterra_0.6.1  
+[13] lubridate_1.9.3   forcats_1.0.0     stringr_1.5.1     dplyr_1.1.4      
+[17] purrr_1.0.2       readr_2.1.5       tidyr_1.3.1       tibble_3.2.1     
+[21] ggplot2_3.5.2     tidyverse_2.0.0   terra_1.8-54      sf_1.0-19        
+[25] patchwork_1.3.0   magick_2.8.5      tmap_4.1          jsonlite_1.8.9   
+[29] ragg_1.3.3        knitr_1.48        here_1.0.1        pacman_0.5.1     
+
+loaded via a namespace (and not attached):
+ [1] DBI_1.2.3               gridExtra_2.3           tmaptools_3.2          
+ [4] s2_1.1.7                logger_0.4.0            rlang_1.1.4            
+ [7] magrittr_2.0.3          e1071_1.7-16            compiler_4.4.1         
+[10] mgcv_1.9-1              png_0.1-8               systemfonts_1.3.2      
+[13] vctrs_0.6.5             crayon_1.5.3            pkgconfig_2.0.3        
+[16] wk_0.9.4                fastmap_1.2.0           labeling_0.4.3         
+[19] lwgeom_0.2-14           leafem_0.2.4            utf8_1.2.4             
+[22] tzdb_0.4.0              spacesXYZ_1.6-0         bit_4.5.0              
+[25] xfun_0.47               parallel_4.4.1          R6_2.5.1               
+[28] stringi_1.8.4           RColorBrewer_1.1-3      stars_0.6-8            
+[31] Rcpp_1.0.13             warp_0.2.1              base64enc_0.1-3        
+[34] leaflet.providers_2.0.0 splines_4.4.1           Matrix_1.7-0           
+[37] timechange_0.3.0        tidyselect_1.2.1        dichromat_2.0-0.1      
+[40] abind_1.4-8             maptiles_0.10.0         codetools_0.2-20       
+[43] plyr_1.8.9              lattice_0.22-6          leafsync_0.1.0         
+[46] withr_3.0.2             units_0.8-5             proxy_0.4-27           
+[49] xml2_1.3.6              pillar_1.11.1           whisker_0.4.1          
+[52] KernSmooth_2.23-24      generics_0.1.3          vroom_1.6.5            
+[55] rprojroot_2.0.4         sp_2.1-4                hms_1.1.3              
+[58] munsell_0.5.1           extraDistr_1.10.0       class_7.3-22           
+[61] glue_1.7.0              lazyeval_0.2.2          tools_4.4.1            
+[64] leaflegend_1.2.1        data.table_1.16.0       XML_3.99-0.18          
+[67] crosstalk_1.2.1         colorspace_2.1-1        nlme_3.1-166           
+[70] cols4all_0.8            raster_3.6-30           cli_3.6.3              
+[73] textshaping_0.4.0       gtable_0.3.5            oai_0.4.0              
+[76] digest_0.6.37           progressr_0.15.0        classInt_0.4-10        
+[79] htmlwidgets_1.6.4       farver_2.1.2            htmltools_0.5.8.1      
+[82] lifecycle_1.0.4         leaflet_2.2.2           httr_1.4.7             
+[85] bit64_4.5.2             microbenchmark_1.5.0   

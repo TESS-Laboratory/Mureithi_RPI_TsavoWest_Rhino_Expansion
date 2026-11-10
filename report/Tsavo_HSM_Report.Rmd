@@ -1,0 +1,785 @@
+---
+title: "Habitat intelligence for black rhino expansion in Tsavo West National Park and cheetah movement across the Tsavo Conservation Area"
+subtitle: "Rangeland productivity, terrain, water and habitat suitability models"
+author: "Isaac Nduta Mureithi, African Wildlife Foundation and University of Exeter"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    number_sections: true
+    reference_docx: reference_A4.docx
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: true
+    fig_caption: true
+bibliography: references.bib
+link-citations: true
+---
+
+```{r setup, include = FALSE}
+# =====================================================================================================
+# HOW THIS REPORT WORKS
+#   1. scripts/Report_Assets.R runs the analysis script and writes every figure (report/figures/*.png)
+#      and every result table (report/results/*.csv, key_facts.json) that this report uses.
+#   2. This file only READS those files: every number in the text is computed from report/results/,
+#      and every figure is a PNG from report/figures/.
+#   3. Figure and table captions are kept together in the two lists in the next chunk. Numbers are assigned
+#      automatically in order of appearance. A figure PNG that has no caption in this report stops the knit
+#      with a message, so no figure can be left without one.
+#   4. A few checks (end of the 'numbers' chunk) stop the knit if the data no longer support a qualitative
+#      statement in the text, so that the narrative cannot silently drift away from the results.
+# Knit with the Knit button in RStudio (Word by default; choose HTML from the Knit menu).
+# =====================================================================================================
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 200,
+                      fig.align = if (identical(knitr::pandoc_to(), "docx")) "default" else "center")   # centring is not supported for Word output
+options(OutDec = ".", knitr.kable.NA = "")
+
+Res.Dir <- "results"
+Fig.Dir <- "figures"
+
+rd    <- function(f) utils::read.csv(file.path(Res.Dir, f), check.names = FALSE, stringsAsFactors = FALSE)
+Facts <- jsonlite::fromJSON(file.path(Res.Dir, "key_facts.json"))
+
+# ---- number formatting ----
+fx <- function(x, d = 2) formatC(x, format = "f", digits = d, big.mark = ",")
+pc <- function(x, d = 1) paste0(fx(x, d), "%")          # x is already a percentage
+
+# ---- zone names used by the analysis script ----
+Z.TW  <- "Tsavo West NP"
+Z.EX  <- "Tsavo West (excl. Rhino Range)"
+Z.RR  <- "Rhino Range (Ngulia + IPZ)"
+Z.NG  <- "Ngulia Sanctuary"
+Z.IPZ <- "Intensive Protection Zone"
+Z.ALL <- c(Z.TW, Z.EX, Z.RR, Z.NG, Z.IPZ)
+
+# ---- numbering: figures and tables are numbered in order of appearance in this file ----
+Rmd.Text  <- readLines(if (is.null(knitr::current_input())) "Tsavo_HSM_Report.Rmd" else knitr::current_input(), warn = FALSE, encoding = "UTF-8")
+grab      <- function(pattern) unique(regmatches(Rmd.Text, regexpr(pattern, Rmd.Text, perl = TRUE)))
+Fig.Order <- grab('(?<=fig\\.cap = cap\\(")[^"]+')
+Tab.Order <- grab('(?<=tab_cap\\(")[^"]+')
+
+num <- function(label, order) {
+  main <- order[!startsWith(order, "app-")]; app <- order[startsWith(order, "app-")]
+  i <- if (startsWith(label, "app-")) match(label, app) else match(label, main)
+  if (is.na(i)) stop("'", label, "' is not used in the report")
+  if (startsWith(label, "app-")) paste0("A", i) else as.character(i)
+}
+fref <- function(label) paste0("Figure ", num(label, Fig.Order))
+tref <- function(label) paste0("Table ", num(label, Tab.Order))
+```
+
+```{r captions, include = FALSE}
+# ---- Figure captions (main text first, then the appendix; labels starting with 'app-' are numbered A1, A2, ...) ----
+Captions <- c(
+  "study-area" = paste0(
+    "Study areas. (a) Kenya, with protected areas in green and the Tsavo Conservation Area (TCA) study area used for the cheetah analysis outlined in red. ",
+    "(b) The TCA study area: Tsavo East NP, Tsavo West NP, South Kitui NR, Chyulu Hills NP and the Taita Taveta Wildlife Conservancies Association (TTWCA) ranches; ",
+    "the dashed red line is the study-area boundary (the union of the five units, closed across small gaps with a 10 km buffer followed by a 5 km inward buffer, which leaves a 5 km margin around the outer edge). ",
+    "(c) Tsavo West NP with the Intensive Protection Zone (IPZ, which forms the Rhino Range), Ngulia Sanctuary (inside the IPZ) and the remaining park area (the expansion zone). Geographic coordinates (WGS 84)."),
+
+  "workflow" = paste0(
+    "Analysis workflow. Input data (left) are processed by the analysis script (*scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd*) into zone statistics, a 500 m predictor stack and cleaned species records; ",
+    "the analyses (centre) produce the figures, tables and habitat suitability rasters (right). *scripts/Report_Assets.R* re-runs the analysis script and exports every figure and table that this report reads."),
+
+  "rpi-map" = paste0(
+    "Mean Relative Productivity Index (RPI) across Tsavo West NP, averaged over ", Facts$rpi$layers, " hydrological years (", Facts$rpi$first_layer, " to ", Facts$rpi$last_layer, "). ",
+    "Higher values (yellow) mean that actual gross primary productivity is closer to the potential estimated for the site's climate. The white outline marks the Rhino Range (IPZ) and the purple outline Ngulia Sanctuary. ",
+    "The white vertical strip in the north and the white speckles are cells without RPI data; the large white block in the east lies outside the park."),
+
+  "rpi-violin" = paste0(
+    "Distribution of annual RPI values in each zone (pixel-by-year values; 5,000 values sampled per zone for plotting). ",
+    "Violins show the density, boxes the quartiles and the white point the median. The dashed line marks RPI = 1, where actual productivity equals the estimated potential."),
+
+  "rpi-timeseries" = paste0(
+    "Annual mean RPI by zone, ", Facts$rpi$first_layer, " to ", Facts$rpi$last_layer, ". Thin lines are annual means, bold lines with markers the 5-year centred rolling mean (shorter windows at the ends of the record) ",
+    "and shaded ribbons the interquartile range (Q25 to Q75) of the pixel values. Hydrological years run from September to August."),
+
+  "rpi-gap" = paste0(
+    "Annual RPI gap between the Rhino Range and the expansion zone (Rhino Range minus Tsavo West excluding the Rhino Range). Points are annual values and the grey line joins them; the bold green line is the 5-year rolling mean. ",
+    "Green shading marks years in which the Rhino Range was more productive and orange shading years in which it was less productive. The Theil-Sen slope of the annual series is annotated on the figure."),
+
+  "trend-maps" = paste0(
+    "Pixel-level RPI trends in Tsavo West NP over the ", Facts$rpi$layers, " hydrological years. Left: Theil-Sen slope (change in RPI per year; red = decline, green = increase). ",
+    "Centre: the slope shown only where the Mann-Kendall test is significant (p < 0.05). Right: classification into significant decrease (red), no significant trend (pale yellow) and significant increase (green). ",
+    "Pixels need at least eight years of data; white areas have no RPI data."),
+
+  "shrub-classes" = paste0(
+    "RPI by shrubland cover class in the park, the expansion zone and the Rhino Range. Pixels were grouped by the ESA WorldCover shrubland fraction (below 25%, 25-50%, 50-75%, 75% or more). ",
+    "Violins and boxes show the distribution of each pixel's mean RPI, white points the medians and the small labels at the top of each panel the number of pixels in each class. The dashed line marks RPI = 1."),
+
+  "spearman-extended" = paste0(
+    "Spearman rank correlations between each pixel's mean RPI and (left to right) PML_V2 fluxes, land-cover fractions, and terrain and hydrology variables, calculated separately for each zone. ",
+    "Warm colours indicate that higher values of the variable go with higher RPI, blue colours the opposite. Distance to water is the stream-network distance. ",
+    "The Intensive Protection Zone and the Rhino Range contain the same pixels except for Ngulia, which is counted twice in the Rhino Range."),
+
+  "elevation" = paste0(
+    "Elevation of Tsavo West NP from the SRTM digital elevation model (76 m), in classes (class labels as defined in the analysis script). The white outline marks the Rhino Range and the purple outline Ngulia Sanctuary."),
+
+  "dist-water" = paste0(
+    "Distance to the nearest drainage line in Tsavo West NP, in classes (the descriptions in the legend are assumptions made in the analysis script, not measured thresholds). ",
+    "Drainage lines are cells with more than 5,000 upslope cells in a D8 flow-accumulation grid of the 76 m DEM; distance is measured along the grid. ",
+    "This stream-network distance differs from the JRC surface-water distance used in the habitat suitability models."),
+
+  "terrain-profiles" = paste0(
+    "Distributions of elevation, slope, terrain ruggedness index (TRI) and stream-network distance to water for the pixels of the park, the expansion zone and the Rhino Range ",
+    "(violins and boxes; white points are medians)."),
+
+  "predictor-corr" = paste0(
+    "Spearman correlations among the candidate predictors (5,000 randomly sampled model cells) for the rhino (a) and cheetah (b) study areas; predictor names are explained in ", tref("predictors"), ". ",
+    "An asterisk marks predictors that the data-driven model does not use: those removed by the collinearity filter (absolute correlation above ", Facts$hsm$config$Corr.Max, " with a higher-priority predictor) ",
+    "and, for the rhino model, human population density and the CHIRPS rainfall layers, which were excluded by design. ",
+    "The cheetah map in this report uses an expert-prior index with its own seven predictors (", tref("prior"), "), not the filtered set marked in (b)."),
+
+  "importance" = paste0(
+    "Permutation importance of the predictors in the black rhino habitat suitability model (mean of ", Facts$hsm$config$N.Iter, " repetitions; predictor names are explained in ", tref("predictors"), "). ",
+    "Larger values mean that randomly shuffling the predictor degrades the model's out-of-bag predictions more."),
+
+  "response" = paste0(
+    "Response curves for the six most important predictors in the rhino model: mean predicted suitability (HSI) as one predictor varies between its 2nd and 98th percentiles while the others keep their observed values ",
+    "(500 randomly sampled cells, three of the ", Facts$hsm$config$N.Iter, " repetitions; predictor names are explained in ", tref("predictors"), ")."),
+
+  "hsi-rhino" = paste0(
+    "Habitat suitability index (HSI, 0-1) for black rhino in Tsavo West NP: the similarity of each 500 m cell to the habitat of the occupied Rhino Range, averaged over ", Facts$hsm$config$N.Iter, " random-forest repetitions. ",
+    "The black line is the park boundary and the red outline the Rhino Range with Ngulia Sanctuary. The pale vertical strip and the white gaps are cells without data."),
+
+  "hsi-zone" = paste0(
+    "Distribution of HSI values by zone. (a) Black rhino: the park, the expansion zone, the Rhino Range and Ngulia Sanctuary; the dashed line is the model threshold (", fx(Facts$hsm$rhino$threshold, 2), "). ",
+    "(b) Cheetah (expert-prior mode) by management unit; the dashed line marks the top third of HSI values in the study area (", fx(Facts$hsm$cheetah$threshold, 2), "). Violins show the density and boxes the quartiles."),
+
+  "hsi-sd" = paste0(
+    "Uncertainty of the rhino HSI: the standard deviation of HSI across the ", Facts$hsm$config$N.Iter, " random-forest repetitions, each with a different random assignment of spatial blocks and pseudo-absences. ",
+    "The black line is the park boundary and the white line the Rhino Range."),
+
+  "candidates" = paste0(
+    "Candidate rhino expansion habitat in the expansion zone, restricted to cells within 5 km of JRC-mapped surface water. Dark green: HSI at or above the model threshold ('Rhino-Range-like'). ",
+    "Orange: in the top 20% of HSI within the expansion zone but below the threshold ('relatively best 20%'). The black line is the park boundary; the red outline and tint mark the Rhino Range."),
+
+  "hsi-cheetah" = paste0(
+    "Cheetah habitat suitability across the Kenyan Tsavo Conservation Area from the expert-prior index (HSI, 0-1). The index combines tree cover, shrubland, grassland, RPI, slope, human population density and distance to water ",
+    "with illustrative, unvalidated weights (", tref("prior"), "). Black lines outline Tsavo East NP, Tsavo West NP, South Kitui NR, Chyulu Hills NP and the TTWCA ranches. ",
+    "White areas inside the outline have no data: gaps between the units, the strip without RPI data in Tsavo West and cells with incomplete predictors (for example non-rangeland cover)."),
+
+  # ---- Appendix A ----
+  "app-africa"    = "Reference map: country boundaries of Africa (simplified, WGS 84).",
+  "app-kenya"     = "Reference map: administrative boundary of Kenya.",
+  "app-pas"       = "Kenya's terrestrial protected areas (green) within Kenya (grey).",
+  "app-tw"        = "Tsavo West National Park (WDPA polygon, April 2025).",
+  "app-ngulia"    = "Ngulia Sanctuary (orange) inside the boundary of Tsavo West NP (black).",
+  "app-ipz"       = "Tsavo West Intensive Protection Zone (orange) inside the boundary of Tsavo West NP (black).",
+  "app-range"     = "The Rhino Range: Ngulia Sanctuary and the Intensive Protection Zone (orange) inside Tsavo West NP. Ngulia lies entirely within the IPZ, so the two polygons overlap.",
+  "app-rpi-tw"    = "Mean RPI in Tsavo West NP (continuous colour scale), averaged over all hydrological years; the white outline is the park boundary.",
+  "app-rpi-ng"    = paste0("Mean RPI in Ngulia Sanctuary. The strip without RPI data that crosses the sanctuary leaves RPI values for only about half of its area (", tref("zones"), ")."),
+  "app-rpi-ipz"   = "Mean RPI in the Intensive Protection Zone.",
+  "app-rpi-rr"    = "Mean RPI in the Rhino Range (Ngulia Sanctuary and IPZ).",
+  "app-quality"   = "Quality of the RPI potential-GPP model across Kenya: mean absolute error (MAE), root mean squared error (RMSE) and R-squared for each pixel, in quantile classes, from the RPI temporal-performance layer. Tsavo West NP is outlined in black and the Rhino Range in red.",
+  "app-pml"       = "PML_V2 mean gross primary productivity (GPP, gC per square metre per year) and canopy transpiration (Ec), soil evaporation (Es) and interception (Ei) (mm) across Kenya, in quantile classes. Tsavo West NP and the Rhino Range are outlined.",
+  "app-landcover" = "Land-cover layers across Kenya: the MODIS IGBP class and the ESA WorldCover fractions (0 to 1) of tree cover, shrubland, grassland, bare ground and all rangelands. The layers are restricted to rangelands, so other cover types are blank. Tsavo West NP and the Rhino Range are outlined.",
+  "app-sen"       = "Pixel-level Theil-Sen slope of RPI in Tsavo West NP (change in RPI per year; red = decline, green = increase), shown for all pixels.",
+  "app-sen-sig"   = "Theil-Sen slope of RPI shown only for pixels with a significant Mann-Kendall trend (p < 0.05).",
+  "app-trend-cat" = "Classification of the pixel-level RPI trend in Tsavo West NP: significant decrease, no significant trend, significant increase.",
+  "app-hex-shrub" = "Mean RPI against shrubland cover for the pixels of each zone. Hexagon colour shows the number of pixels (logarithmic scale); the green line is a LOESS smoother (shaded band: 95% confidence interval) and the dashed line marks RPI = 1.",
+  "app-hex-grass" = "Mean RPI against grassland cover for the pixels of each zone (hexagon density, LOESS smoother and its confidence band; dashed line at RPI = 1).",
+  "app-spearman"  = "Spearman rank correlations between each pixel's mean RPI and the PML_V2 fluxes and land-cover fractions, calculated separately for each zone.",
+  "app-slope"     = "Slope of Tsavo West NP (degrees, in classes) from the 76 m DEM; the white outline marks the Rhino Range and the purple outline Ngulia Sanctuary.",
+  "app-tri"       = "Terrain ruggedness index (TRI) of Tsavo West NP, in classes; the white outline marks the Rhino Range and the purple outline Ngulia Sanctuary.",
+  "app-twi"       = "Topographic wetness index (TWI) of Tsavo West NP, in classes. Higher values mean greater potential soil-moisture accumulation.",
+  "app-hydro"     = "Drainage network (cells with more than 5,000 upslope cells) over the topographic wetness index in Tsavo West NP.",
+  "app-rpi-elev"  = "Mean RPI against elevation for the pixels of each zone (hexagon density, LOESS smoother with its confidence band). Purple shading marks the Ngulia Hills elevation band above 1,200 m.",
+  "app-rpi-water" = "Mean RPI against stream-network distance to water for the pixels of each zone (hexagon density and LOESS smoother). The orange dashed line marks 2 km, the distance the analysis script takes as the limit for daily water access (an assumption)."
+)
+
+Tab.Captions <- c(
+  "data-sources"  = "Data sets used in the analysis.",
+  "zones"         = paste0("Zones, the area of the RPI cells whose centres lie in each zone, the number of RPI pixels and the share of each zone covered by RPI data.The RPI raster has a strip without data that crosses the Rhino Range (", fref("rpi-map"), "). Ngulia lies inside the IPZ, so the Rhino Range and the IPZ cover the same area."),
+  "rpi-trends"    = paste0("Trends in annual mean RPI (Theil-Sen slope and Mann-Kendall test, n = ", Facts$rpi$layers, " years) and share of pixels with a significant trend (p < 0.05)."),
+  "profile"       = "Land cover (ESA WorldCover fractions) and water-energy fluxes (PML_V2) by zone. Values are zone means over all pixels.",
+  "terrain"       = "Terrain and stream-network water access by zone (zone means; distances in km).",
+  "predictors"    = "Predictors considered for the habitat suitability models and their status in the rhino model and in the cheetah expert-prior index.",
+  "gbif"          = "GBIF records downloaded for each species and the effect of each cleaning step. Only records that pass every step could be used as presences.",
+  "accuracy"      = paste0("Accuracy of the rhino model on held-out spatial blocks (mean and standard deviation of the ", Facts$hsm$config$N.Iter, " repetitions)."),
+  "zone-hsi"      = "Rhino habitat suitability by zone: mean and median HSI, and the share and area of cells at or above the model threshold. The Intensive Protection Zone has the same values as the Rhino Range and is not shown separately.",
+  "water-zone"    = "Distance to water in three zones under the two definitions of water used in the rhino analysis: JRC surface water (the default in the habitat suitability model) and the stream network derived from the DEM. Distances are means over 500 m model cells.",
+  "candidates"    = "Candidate rhino expansion habitat in the expansion zone, and its sensitivity to the water layer. 'All 500 m cells' counts every cell whose centre lies in the zone, including cells without RPI data; only cells with complete predictors enter the model, so the threshold and candidate rows refer to those.",
+  "prior"         = "Parameters of the expert-prior index for cheetah (illustrative; to be reviewed by cheetah specialists).",
+  "cheetah-units" = "Cheetah habitat suitability (expert-prior index) by management unit. 'Suitable' means the top third of HSI values in the study area.",
+  "app-inventory" = "Input data files read by the analysis, with size and MD5 checksum (the checksum lets readers confirm that they hold the same version).",
+  "app-software"  = "Versions of the main software used to produce the figures and tables."
+)
+
+cap     <- function(label) { if (!label %in% names(Captions)) stop("No caption for figure '", label, "'"); paste0("**Figure ", num(label, Fig.Order), ".** ", Captions[[label]]) }
+tab_cap <- function(label) { if (!label %in% names(Tab.Captions)) stop("No caption for table '", label, "'"); paste0("**Table ", num(label, Tab.Order), ".** ", Tab.Captions[[label]]) }
+
+# ---- guard: every generated figure must appear in this report with a caption ----
+Used <- grab('(?<=include_graphics\\("figures/)[^"]+')
+Have <- list.files(Fig.Dir, pattern = "\\.png$")
+if (length(setdiff(Have, Used)) > 0) stop("These figures were generated (report/figures) but have no caption in the report: ", paste(setdiff(Have, Used), collapse = ", "),
+                                           "\nAdd each with knitr::include_graphics() and a caption (see 'Captions' in the captions chunk).")
+if (length(setdiff(Used, Have)) > 0) stop("These figures are used in the report but were not generated: ", paste(setdiff(Used, Have), collapse = ", "))
+if (length(setdiff(names(Captions), Fig.Order)) > 0) stop("Captions defined but not used: ", paste(setdiff(names(Captions), Fig.Order), collapse = ", "))
+if (length(setdiff(names(Tab.Captions), Tab.Order)) > 0) stop("Table captions defined but not used: ", paste(setdiff(names(Tab.Captions), Tab.Order), collapse = ", "))
+```
+
+```{r numbers, include = FALSE}
+# ---- result tables written by scripts/Report_Assets.R ----
+Zsum <- rd("RPI.Zone.Overall.Summary.csv"); Zcov <- rd("Zone_RPI_coverage.csv"); Ztr <- rd("RPI.Zone.Trends.csv"); Gtr <- rd("RPI.Gap.Trend.Summary.csv")
+Gan  <- rd("RPI.Gap.Annual.csv");           Ptr  <- rd("RPI.Pixel.Trend.Summary.csv"); Prof <- rd("Unified.Zone.Profile.csv"); Terr <- rd("Terrain.Zone.Summary.csv")
+Sp0  <- rd("Spearman.Correlations.csv");    Sp   <- rd("Spearman.Extended.csv"); Igbp <- rd("IGBP.All.Zones.csv")
+Hs   <- rd("HSM.Summary.Rhino.csv");        Hc   <- rd("HSM.Summary.Cheetah.csv"); Cand <- rd("Candidate.Summary.csv")
+Met  <- rd("HSM_Rhino_Metrics_by_run.csv"); Imp  <- rd("HSM_Rhino_Importance.csv"); Resp <- rd("HSM_Rhino_Response_curves.csv"); Sens <- rd("HSM_Rhino_water_sensitivity.csv")
+Wz   <- rd("HSM_Rhino_water_by_zone.csv");  Sdz  <- rd("HSM_Rhino_HSI_SD_by_zone.csv")
+Gq   <- rd("HSM_GBIF_quality.csv");         Gcr  <- rd("HSM_Rhino_GBIF_cleaning.csv"); Gcc <- rd("HSM_Cheetah_GBIF_cleaning.csv"); Prior <- rd("Cheetah.Prior.csv")
+
+# ---- small look-up helpers (columns are matched by pattern so that special characters in names do not matter) ----
+zv  <- function(df, zone, col) df[df$ZONE == zone, col][1]
+hz  <- function(unit, col, df = Hs) df[df$Unit == unit, col][1]
+pv  <- function(zone, pattern) Prof[Prof$ZONE == zone, grep(pattern, names(Prof))[1]]
+sp0 <- function(zone, pattern) Sp0$Spearman.r[Sp0$ZONE == zone & grepl(pattern, Sp0$Variable)][1]
+tp  <- function(zone, cat) { x <- Ptr$Pct.Pixels[Ptr$ZONE == zone & Ptr$Trend.Category == cat]; if (length(x) == 0) 0 else x }
+wz  <- function(layer, unit, col) Wz[grepl(layer, Wz$Water.Layer) & Wz$Unit == unit, col][1]
+sdz <- function(unit, col) Sdz[Sdz$Unit == unit, col][1]
+ri   <- function(v, x) stats::approx(Resp$Value[Resp$Variable == v], Resp$HSI[Resp$Variable == v], xout = x, rule = 2)$y   # response curve read at x
+peak <- function(v) Resp$Value[Resp$Variable == v][which.max(Resp$HSI[Resp$Variable == v])]
+
+# ---- productivity ----
+rr_mean <- zv(Zsum, Z.RR, "Mean.RPI"); ex_mean <- zv(Zsum, Z.EX, "Mean.RPI"); tw_mean <- zv(Zsum, Z.TW, "Mean.RPI"); ipz_mean <- zv(Zsum, Z.IPZ, "Mean.RPI")
+sd_px    <- sqrt(mean(c(zv(Zsum, Z.RR, "SD.RPI"), zv(Zsum, Z.EX, "SD.RPI"))^2))
+gap_mean <- mean(Gan$RPI.Gap)
+gap_pre  <- mean(Gan$RPI.Gap[Gan$Year.Start < 2008]); gap_post <- mean(Gan$RPI.Gap[Gan$Year.Start >= 2008])
+r_annual <- cor(Gan$TW.Excl.Mean.RPI, Gan$RhinoRange.Mean.RPI)
+mean_all <- range(Zsum$Mean.RPI[Zsum$ZONE %in% c(Z.TW, Z.EX, Z.RR)])
+
+# ---- water layer sensitivity ----
+S1 <- Sens[grepl("JRC", Sens$Water.Layer), ]; S2 <- Sens[grepl("Whitebox", Sens$Water.Layer), ]
+exp_km2 <- hz(Z.EX, "Area.km2")
+
+# ---- land cover ----
+igbp_grass_min <- min(Igbp$Pct_Pixels[Igbp$IGBP_Label == "Grassland"])
+shrub_rng  <- range(vapply(Z.ALL, pv, numeric(1), pattern = "Shrubland"))
+lc_cor_max <- max(abs(Sp0$Spearman.r[Sp0$ZONE %in% c(Z.TW, Z.EX, Z.RR) & grepl("^(Shrubland|Grassland|Tree|Bare)", Sp0$Variable)]))
+
+# ---- checks: stop the knit if the data no longer support a qualitative statement in the text ----
+check <- function(ok, msg) if (!isTRUE(ok)) stop("The data no longer support this statement in the text: ", msg, ". Revise the text, then knit again.", call. = FALSE)
+check(rr_mean > ex_mean, "the Rhino Range is more productive than the expansion zone")
+check(all(Ztr$P.Value > 0.05) && Gtr$P.Value > 0.05, "no zone and not the productivity gap shows a significant trend")
+check(sum(Gan$RPI.Gap > 0) >= 20, "the Rhino Range is more productive than the expansion zone in nearly every year")
+check(identical(head(Imp$Variable, 3), c("Es", "Dist_Water_km", "Elevation_m")), "soil evaporation, distance to water and elevation are the three most important rhino predictors")
+check(S2$Candidate.RangeLike.km2 > S1$Candidate.RangeLike.km2, "the stream network gives a larger candidate area than JRC water")
+check(wz("JRC", Z.RR, "Pct.Within.5km") < wz("JRC", Z.EX, "Pct.Within.5km"), "JRC-mapped water lies farther from the Rhino Range than from the expansion zone")
+check(identical(Facts$hsm$cheetah$mode, "prior"), "the cheetah map uses the expert-prior index")
+check(lc_cor_max < 0.3, "land-cover fractions are only weakly correlated with RPI outside Ngulia")
+check(igbp_grass_min > 90, "MODIS IGBP classes nearly all pixels of every zone as grassland")
+```
+
+# Summary {-}
+
+Kenya's black rhino (*Diceros bicornis michaeli*) population reached 1,059 animals on 31 December 2024 [@khayale2025], yet more than 80% of the animals live in sanctuaries that exceed their ecological carrying capacity, leaving a space deficit of about 500 rhinos [Amin et al. 2022, cited in @khayale2025]. Range expansion is one of the five operational pillars of the national rhino strategy [Amin et al. 2006, cited in @khayale2025] and depends on knowing where more habitat exists. This report asks that question for Tsavo West National Park, where a 3,000 km^2^ Intensive Protection Zone (IPZ) accommodates hundreds of rhinos [Okita-Ouma et al. 2006, cited in @khayale2025], and applies the same habitat-intelligence approach to cheetah (*Acinonyx jubatus*) across the Kenyan part of the Tsavo Conservation Area (TCA).
+
+Rangeland productivity, measured with the Relative Productivity Index (RPI) of Lomax et al. [-@lomax2025] over `r Facts$rpi$layers` hydrological years, was combined at pixel level with PML_V2 water-energy fluxes, land cover, terrain and hydrology. The Rhino Range has a higher mean RPI than the rest of the park (`r fx(rr_mean)` against `r fx(ex_mean)`). The difference is persistent (the Rhino Range was more productive in `r sum(Gan$RPI.Gap > 0)` of `r nrow(Gan)` years) and shows no trend (Theil-Sen slope `r sprintf("%+.4f", Gtr$Sen.Slope)` per year, p = `r fx(Gtr$P.Value)`), and no zone shows a significant trend in mean RPI. A random-forest habitat suitability model that takes the occupied Rhino Range as its reference (cross-validated AUC `r fx(mean(Met$AUC.ROC))`) classifies only `r pc(hz(Z.EX, "Pct.Suitable"))` of the rest of the park (`r fx(hz(Z.EX, "Suitable.km2"), 0)` km^2^) as Rhino-Range-like. Candidate expansion habitat within 5 km of water covers `r fx(S1$Candidate.RangeLike.km2, 0)` km^2^ when water is taken from JRC surface-water maps, but `r fx(S2$Candidate.RangeLike.km2, 0)` km^2^ when it is taken from the stream network derived from the terrain; only `r pc(wz("JRC", Z.RR, "Pct.Within.5km"), 0)` of the existing Rhino Range lies within 5 km of JRC-mapped water, so the first figure is probably too strict, and the conclusion depends on how water is defined. GBIF holds recent records for both species in Tsavo, but only `r Gq$Uncertainty.le.1000m[1]` of `r Gq$Records[1]` rhino and `r Gq$Uncertainty.le.1000m[2]` of `r Gq$Records[2]` cheetah records are precise enough (coordinate uncertainty of 1,000 m or less) for a 500 m model, so cheetah suitability is mapped with an editable, unvalidated expert-prior index until precise records are available. Every figure and table in this report is regenerated by the analysis script and an export script, and every figure carries a caption.
+
+# Introduction
+
+*Note on citations.* The six main articles are Khayale et al. [-@khayale2025], Okita-Ouma et al. [-@okitaouma2016], Henschel et al. [-@henschel2020], Lala et al. [-@lala2021], Mukeka et al. [-@mukeka2020] and Muneza et al. [-@muneza2022]. A statement attributed to 'X, cited in Y' is reported as stated in the main article Y; the original work X was not consulted.
+
+## Black rhino recovery and the case for range expansion
+
+The five extant rhinoceros species are all threatened with extinction [Emslie 2020a, b, c, Ellis and Talukdar 2019, 2020a, b, cited in @khayale2025]. The eastern black rhino functions as both an umbrella and a keystone species in Kenya and drives direct economic benefits through wildlife-based eco-tourism [@khayale2025]. Black rhinos had been eliminated from more than 75% of their Kenyan range by the early 1970s [@khayale2025], and uncontrolled poaching then reduced the national population from an estimated 20,000 in 1970 to 370 by 1989 [Hillman and Martin 1979, Brett 1993, cited in @khayale2025]. In Tsavo the population fell from 6,150-9,220 animals, over one-third of Kenya's historical total, to fewer than 50 by 1984 [Goddard 1969, Brett 1993, cited in @khayale2025].
+
+In 1984, recognising that anti-poaching resources were spread too thinly across large areas [Leader-Williams 1997, cited in @khayale2025], Kenya shifted policy towards dedicated rhino sanctuaries and Intensive Protection Zones (IPZs), often fully enclosed with specialised electric fencing [Gakahu 1989, Brett 1990, 1993, Okita-Ouma et al. 2007, cited in @khayale2025]. The Kenya Rhino Project established six initial ring-fenced sanctuaries, among them Ngulia Rhino Sanctuary in Tsavo West National Park [@khayale2025]. A 3,000 km^2^ partially fenced IPZ accommodating hundreds of rhinos was established in Tsavo West National Park in 2008 [Okita-Ouma et al. 2006, cited in @khayale2025], and Ngulia itself was expanded from 62 to 92 km^2^ in 2007 alongside browser removal [Brett and Adcock 2002, Okita-Ouma et al. 2008, cited in @khayale2025].
+
+Protection has worked: poaching mortality fell to below 1% (eight deaths) over the five years before 2025, with no poaching incidents in 2020 [@khayale2025]. The result is a different problem. More than 80% of Kenya's black rhinos live in sanctuaries that exceed their ecological carrying capacity, which creates a space deficit of about 500 rhinos and requires the relocation of more than 300 animals [Amin et al. 2022, cited in @khayale2025]. The Kenya Rhino Range Expansion (KRRE) initiative, launched in 2024 by the Kenya Wildlife Service (KWS) and partners, seeks to open new contiguous landscapes across Laikipia, Tsavo, Central Kenya and the Meru conservation areas [@khayale2025]. Growth of at least 5% a year from the 2024 baseline of 1,059 would give 2,312 rhinos by 2040 and is on track to achieve the national vision of 2,000 wild black rhinos by 2037 [@khayale2025]. Ecological carrying-capacity assessments and range expansion are two of the five operational pillars of the national strategy [Amin et al. 2006, cited in @khayale2025]; this report contributes to both for Tsavo West.
+
+## Tsavo as a landscape for wildlife movement
+
+Tsavo East and West National Parks together cover 20,812 km^2^, 70% of Kenya's national park estate [@henschel2020]. They form the only remaining wildlife corridor across the belt of settlement and agriculture that separates East Africa's southern mesic grasslands from its northern semi-arid bush savannahs [Jacobson et al. 2015, cited in @henschel2020]. The landscape is being fragmented by linear infrastructure. The 500 km Standard Gauge Railway (SGR), Kenya's most significant transport project since the early twentieth century, bisects the 23,000 km^2^ Tsavo parks complex, with embankments up to 10 m high and continuous fencing along the sections that cross the conservation area; the Mombasa-Nairobi highway runs parallel to the SGR, and the Voi-Taveta highway passes through Tsavo West National Park [@okitaouma2016]. Along a 164 km stretch of the Mombasa-Nairobi highway, 11 years of surveys recorded roadkill that was significantly more frequent on segments crossing protected areas, clustered closer to rivers, peaked in the dry season and was associated with roadside shrub cover [@lala2021]. In the regions around the parks, human-wildlife conflict is concentrated in Taveta and Rombo, which account for 70% of the reported incidents in the Greater Tsavo Ecosystem [@mukeka2020], and attitudes towards wildlife depend on landscape conditions such as drought and access to grazing land [@muneza2022].
+
+Cheetahs make the connectivity question concrete. Henschel et al. [-@henschel2020] estimated a density of 0.74 (± 0.35) cheetahs per 100 km^2^, or 154 (± 74) animals across the Tsavo parks, with a patchy distribution and more records in drier areas. Because much of the remaining cheetah range lies outside protected areas [Durant et al. 2017, cited in @henschel2020], Tsavo's connectivity between northern and southern wilderness is vital for this Vulnerable species [@henschel2020]. Low density also makes monitoring demanding: detecting a 10% annual change would take up to 141 surveys [@henschel2020].
+
+## Rangeland productivity as habitat intelligence
+
+The Relative Productivity Index (RPI) is the ratio of observed annual gross primary productivity (GPP) to the potential productivity expected for a site's climate and other biophysical conditions, which Lomax et al. [-@lomax2025] estimate with quantile regression forests. A value near 1 means that vegetation is producing close to its potential; lower values indicate suppressed productivity. An earlier application of the RPI to the Amboseli-Tsavo ecosystem found that management effectiveness, rather than governance type, influenced outcomes [@mureithi2025]. Here the RPI is combined with land cover, water-energy fluxes, terrain and hydrology to build what this report calls *habitat intelligence*: spatial evidence on where habitat resembles what rhinos already use and where cheetahs are likely to find suitable conditions.
+
+## Aim and objectives
+
+The aim is to provide a reproducible, evidence-based assessment of habitat for black rhino expansion in Tsavo West National Park and for cheetah across the Kenyan Tsavo Conservation Area. The objectives are to:
+
+1. quantify the difference in rangeland productivity between the Rhino Range and the rest of Tsavo West, and test whether it is changing;
+2. describe the land cover, water-energy flux, terrain and water conditions that accompany that difference;
+3. build a transparent habitat suitability model for black rhino that identifies areas resembling the habitat the Rhino Range already provides, and report candidate expansion areas;
+4. map habitat suitability for cheetah across the TCA and document what data a validated model needs; and
+5. document the workflow so that every figure and table can be regenerated.
+
+# Study area
+
+Tsavo West National Park (WDPA polygon, April 2025) covers `r fx(Facts$zone_area_km2$tsavo_west, 0)` km^2^ in southern Kenya. The Rhino Range is the Ngulia Sanctuary together with the IPZ. The IPZ polygon used here covers `r fx(Facts$zone_area_km2$ipz, 0)` km^2^, close to the 3,000 km^2^ reported for the zone [Okita-Ouma et al. 2006, cited in @khayale2025]. The Ngulia polygon covers `r fx(Facts$zone_area_km2$ngulia, 0)` km^2^ against the 92 km^2^ reported after the 2007 expansion [Brett and Adcock 2002, Okita-Ouma et al. 2008, cited in @khayale2025]. Because Ngulia lies entirely inside the IPZ, the Rhino Range occupies the same area as the IPZ (`r fx(Facts$zone_area_km2$rhino_range, 0)` km^2^); the remaining `r fx(Facts$zone_area_km2$tw_excl_rhino_range, 0)` km^2^ of the park is called the *expansion zone* (`r fref("study-area")`c).
+
+For the cheetah analysis the study area is the Kenyan part of the TCA: Tsavo East NP, Tsavo West NP, South Kitui NR, Chyulu Hills NP and the TTWCA ranches, joined across small gaps and given a 5 km outer margin (`r fx(Facts$zone_area_km2$cheetah_study_area, 0)` km^2^; `r fref("study-area")`b). Mkomazi National Park in Tanzania is excluded because the PML_V2 and land-cover layers cover Kenya only. The study area is therefore about `r pc(Facts$zone_area_km2$cheetah_study_area / 60000 * 100, 0)` of the roughly 60,000 km^2^ that Muneza et al. [-@muneza2022] give for the TCA, and well below the 66,300 km^2^ study region of Mukeka et al. [-@mukeka2020], which also includes six administrative regions around the Greater Tsavo Ecosystem protected area. The Tsavo East and Tsavo West polygons used here sum to `r fx(Facts$zone_area_km2$cheetah_units[["Tsavo East NP"]] + Facts$zone_area_km2$cheetah_units[["Tsavo West NP"]], 0)` km^2^, about `r pc((1 - (Facts$zone_area_km2$cheetah_units[["Tsavo East NP"]] + Facts$zone_area_km2$cheetah_units[["Tsavo West NP"]]) / 20812) * 100, 0)` below the 20,812 km^2^ reported by Henschel et al. [-@henschel2020]. Mean annual rainfall in the TCA lies between 300 and 1,200 mm [Oremo et al. 2019, cited in @muneza2022].
+
+```{r f-study, fig.cap = cap("study-area"), out.width = "100%"}
+knitr::include_graphics("figures/Study_area_overview.png")
+```
+
+Linear infrastructure (the SGR and the Mombasa-Nairobi and Voi-Taveta highways) crosses this landscape [@okitaouma2016; @lala2021]. It is not represented in the models of this report, which is a limitation discussed in Section 5.3.
+
+# Data and methods
+
+## Data
+
+`r tref("data-sources")` lists the data. Every input file that the analysis reads is recorded with its size and checksum in `r tref("app-inventory")`.
+
+```{r t-data}
+Data.Sources <- data.frame(
+  `Data set` = c("Relative Productivity Index (RPI) v2", "RPI temporal performance", "PML_V2 fluxes", "Land cover", "Terrain", "Hydrology",
+                 "Surface water, rainfall and greenness (Earth Engine exports)", "Population density", "Boundaries", "Species records"),
+  Content = c("Annual ratio of actual to potential GPP; 23 hydrological years (September-August), 2000-01 to 2022-23",
+              "Mean absolute error, RMSE and R-squared of the potential-GPP model for each pixel",
+              "Mean GPP (gC per square metre per year) and mean canopy transpiration (Ec), soil evaporation (Es) and interception (Ei) in mm, exported from Earth Engine",
+              "MODIS IGBP land-cover class; fractional cover of trees, shrubland, grassland and bare ground (ESA WorldCover 2020), 500 m",
+              "SRTM elevation from the elevatr package (76 m for Tsavo West; 153 m for the TCA); slope and terrain ruggedness index (TRI)",
+              "Flow accumulation, drainage lines, topographic wetness index (TWI) and distance to the drainage network from WhiteboxTools",
+              "JRC surface-water occurrence (exported at 90 m), CHIRPS rainfall 2010-2024 (about 5.6 km) and MODIS NDVI 2010-2024 (250 m)",
+              "Kenya population density 2020, 1 km (file ken_pd_2020_1km.tif; original source to be added)",
+              "Parks (WDPA, April 2025); Ngulia Sanctuary and IPZ polygons; TCA parks and TTWCA ranches",
+              "GBIF occurrence records (rgbif) and, optionally, precise records supplied by KWS or AWF"),
+  Source = c("[@lomax2025; @lomax2025data]", "[@lomax2025data]", "[@zhang2019]", "[@zanaga2021]", "[@farr2007]; TWI [@beven1979]; TRI [@riley1999]",
+             "[@lindsay2016]", "[@pekel2016; @funk2015; @didan2021]", "-", "WDPA; project files", "[@gbif2026; @chamberlain2025]"),
+  check.names = FALSE)
+knitr::kable(Data.Sources, caption = tab_cap("data-sources"))
+```
+
+## Productivity by zone, trends and the productivity gap
+
+Five zones were analysed: the whole park, the expansion zone, the Rhino Range, Ngulia Sanctuary and the IPZ. All RPI pixels inside each zone were extracted and summarised by zone and hydrological year. Annual zone means were smoothed with a 5-year centred rolling mean. Trends in annual mean RPI were estimated with the Theil-Sen slope [@sen1968] and tested with the Mann-Kendall test [@mann1945], both as implemented in the *trend* package [@pohlert2023]. The same procedure was applied to every pixel with at least eight years of data (significance at p < 0.05). The productivity gap is the annual mean RPI of the Rhino Range minus that of the expansion zone; its trend was tested in the same way.
+
+Ngulia lies inside the IPZ, so the pixel records of the combined Rhino Range include the Ngulia pixels twice. This affects `r fx(zv(Zcov, Z.NG, "N.Pixels") / zv(Zcov, Z.RR, "N.Pixels") * 100, 1)`% of the Rhino Range pixels and changes the zone mean by `r fx(abs(rr_mean - ipz_mean), 4)` (Rhino Range `r fx(rr_mean, 4)`, IPZ `r fx(ipz_mean, 4)`).
+
+## Land cover, fluxes, terrain and water
+
+To avoid resampling, every variable was sampled at the centres of the RPI pixels and compared with each pixel's mean RPI using Spearman rank correlation, separately for each zone. Slope and TRI [@riley1999] were derived from the 76 m DEM. Flow accumulation (the number of cells draining to each cell) and the topographic wetness index [@beven1979] came from WhiteboxTools [@lindsay2016] after breaching and filling depressions. Drainage lines were defined as cells with more than 5,000 upslope cells (about 29 km^2^ at 76 m); distance to water is the distance along the grid to the nearest drainage cell. This threshold has not been calibrated against mapped rivers.
+
+## Habitat suitability models
+
+**Grid and predictors.** Models use a 500 m grid in UTM zone 37S (EPSG:32737) clipped to each study area. Predictors were resampled once onto this grid: mean and variability of RPI, PML_V2 fluxes, land-cover fractions, elevation, slope, TRI, population density and, when the Earth Engine exports were available, distance to JRC surface water, CHIRPS rainfall and MODIS NDVI (`r tref("predictors")`). Among pairs of predictors with a Spearman correlation above `r Facts$hsm$config$Corr.Max`, the predictor that comes later in a fixed priority list was dropped. The list runs: mean RPI, shrubland, grassland, trees, bare ground, distance to water, slope, elevation, TRI, population density, RPI variability, GPP, canopy transpiration, soil evaporation, then the CHIRPS and NDVI layers.
+
+**Species records.** GBIF records [@gbif2026] were downloaded for each study-area bounding box (from 2010 to the download date: `r Facts$gbif$rhino_file` for rhino and `r Facts$gbif$cheetah_file` for cheetah) and cleaned: field observations only; coordinate uncertainty of 1,000 m or less; coordinates neither rounded nor withheld; inside the study area; one record per 500 m cell. A data-driven model needs at least `r Facts$hsm$config$Min.Presences` cleaned records.
+
+**Black rhino.** Precise rhino locations are not available, so every 500 m cell of the occupied Rhino Range was treated as a presence and pseudo-absences were drawn from the rest of the park. This gives a habitat-similarity model: it shows which parts of the park resemble the conditions in the Rhino Range, not where rhinos choose to live. The model is a random forest [@breiman2001] fitted with the *ranger* package [@wright2017], using `r Facts$hsm$config$N.Trees` trees, a minimum node size of 10 and half of the data per tree, and repeated `r Facts$hsm$config$N.Iter` times with fixed seeds. In each repetition, spatial blocks of 5 km were assigned at random, 70% to training and 30% to testing, so that test cells are never neighbours of training cells; the training and testing sets each hold equal numbers of presences and pseudo-absences (at most `r fx(Facts$hsm$config$Max.Train, 0)` presences, and as many pseudo-absences, in each). This follows the case studies of Crego et al. [-@crego2022], translated to R. Accuracy was measured on the held-out blocks as the area under the ROC curve (AUC-ROC), the area under the precision-recall curve (AUC-PR) and the true skill statistic; the cut-off that maximises sensitivity plus specificity gives the suitability threshold, and the final threshold is the mean over repetitions. The habitat suitability index (HSI, 0-1) is the mean prediction over repetitions and its standard deviation measures uncertainty. Human population density and the coarse CHIRPS rainfall layers were left out of the rhino model: inside a park they mostly encode position, and with presences concentrated in one range they would only learn where the range is.
+
+**Candidate expansion habitat.** Within the expansion zone (cells whose centres lie inside it), *Rhino-Range-like* cells have HSI at or above the threshold and lie within 5 km of water; *relatively best 20%* cells lie in the top fifth of expansion-zone HSI values, within 5 km of water, but below the threshold. The 5 km screen is an assumption of the analysis script. Section 4.4.1 tests how far the result depends on the water layer by refitting the model with the stream-network distance of Section 3.3.
+
+**Cheetah.** With too few precise records for a data-driven model, suitability was mapped with an expert-prior index: each predictor is converted to a 0-1 suitability with a trapezoidal function, and the functions are combined as a weighted geometric mean (`r tref("prior")`). The parameters are illustrative and have not been validated; they should be reviewed by cheetah specialists. The few precise GBIF records serve only as a reality check.
+
+## Reproducibility
+
+All steps are scripted. *scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd* holds the analysis, *scripts/gee/01_TCA_HSM_predictors_export.js* exports the optional Earth Engine layers, and *scripts/Report_Assets.R* re-runs the analysis and writes every figure and table used here. Random seeds are fixed (`r paste(Facts$hsm$seeds, collapse = ", ")`). The software versions are in `r tref("app-software")` and the data checksums in `r tref("app-inventory")`. The report was generated on `r Facts$generated` from the analysis script with MD5 checksum `r substr(Facts$analysis_md5, 1, 8)` (repository commit `r paste0(Facts$git_commit, if (isTRUE(Facts$git_dirty)) " plus uncommitted changes" else "")`). Software used includes R [@rcore2024], *terra* [@hijmans2025], *sf* [@pebesma2018], *tmap* [@tennekes2018], the *tidyverse* [@wickham2019] and *ggplot2* [@wickham2016].
+
+```{r f-workflow, fig.cap = cap("workflow"), fig.width = 7.4, fig.height = 3.2, out.width = "100%"}
+library(ggplot2)
+stages <- data.frame(x0 = c(0, 2.65, 5.3, 7.95), x1 = c(2.4, 5.05, 7.7, 10.35),
+                     title = c("1  Data", "2  Processing", "3  Analyses", "4  Outputs"),
+                     fill  = c("#dfeaf5", "#e4f1de", "#fdebd0", "#eddff0"))
+items <- list(
+  c("RPI v2 (23 years)", "PML_V2 fluxes", "Land cover (MODIS, ESA)", "SRTM DEM", "CHIRPS, NDVI, JRC water (Earth Engine)", "GBIF or supplied records", "Park and zone boundaries"),
+  c("Zonal pixel extraction", "Terrain and hydrology (WhiteboxTools)", "500 m predictor stack", "Collinearity filter", "Record cleaning"),
+  c("RPI trends and productivity gap (Theil-Sen)", "Land cover, terrain, water vs RPI (Spearman)", "Rhino model (random forest)", "Cheetah expert-prior index", "Water-layer sensitivity"),
+  c("Figures and tables", "Suitability rasters", "Candidate expansion areas", "Reproducibility record", "This report"))
+txt <- vapply(items, function(i) paste(unlist(lapply(i, function(s) paste(strwrap(s, 24, initial = "• ", prefix = "   "), collapse = "\n"))), collapse = "\n"), "")
+ggplot() +
+  geom_rect(data = stages, aes(xmin = x0, xmax = x1, ymin = 4.2, ymax = 10, fill = fill), colour = "grey35", linewidth = 0.4) +
+  scale_fill_identity() +
+  geom_text(data = stages, aes(x = (x0 + x1) / 2, y = 9.35, label = title), fontface = "bold", size = 3.6) +
+  geom_text(data = cbind(stages, txt = txt), aes(x = x0 + 0.12, y = 8.6, label = txt), hjust = 0, vjust = 1, size = 2.7, lineheight = 1.05) +
+  annotate("segment", x = c(2.4, 5.05, 7.7), xend = c(2.65, 5.3, 7.95), y = 7.1, yend = 7.1, arrow = arrow(length = unit(0.12, "in")), linewidth = 0.7) +
+  annotate("segment", x = c(0, 7.95), xend = c(7.7, 10.35), y = 3.7, yend = 3.7, linewidth = 0.4, colour = "grey30") +
+  annotate("text", x = 3.85, y = 3.1, label = "scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd", size = 2.8, fontface = "italic") +
+  annotate("text", x = 9.15, y = 3.1, label = "scripts/Report_Assets.R", size = 2.8, fontface = "italic") +
+  coord_cartesian(xlim = c(-0.1, 10.45), ylim = c(2.5, 10.2), expand = FALSE) +
+  theme_void()
+```
+
+# Results
+
+## Productivity of the Rhino Range and the rest of Tsavo West
+
+The RPI raster does not cover the whole park. A rectangular strip without data runs north-south through the northern part of Tsavo West and across Ngulia Sanctuary (`r fref("rpi-map")`), so RPI covers `r pc(zv(Zcov, Z.TW, "RPI.Coverage.Pct"))` of the park, `r pc(zv(Zcov, Z.RR, "RPI.Coverage.Pct"))` of the Rhino Range and only `r pc(zv(Zcov, Z.NG, "RPI.Coverage.Pct"))` of Ngulia Sanctuary (`r tref("zones")`). Statistics for Ngulia rest on `r fx(zv(Zcov, Z.NG, "N.Pixels"), 0)` pixels and should be read with that in mind.
+
+```{r t-zones}
+Zt <- merge(Zcov[, c("ZONE", "Cells.km2.expected", "N.Pixels", "RPI.Coverage.Pct")], Zsum[, c("ZONE", "Mean.RPI", "Median.RPI", "SD.RPI")], by = "ZONE")
+Zt <- Zt[match(Z.ALL, Zt$ZONE), ]
+names(Zt) <- c("Zone", "RPI cell area (km2)", "RPI pixels", "RPI coverage (%)", "Mean RPI", "Median RPI", "SD of RPI")
+knitr::kable(Zt, digits = c(0, 0, 0, 1, 3, 3, 3), format.args = list(big.mark = ","), row.names = FALSE, caption = tab_cap("zones"))
+```
+
+```{r f-rpi-map, fig.cap = cap("rpi-map"), out.width = "62%"}
+knitr::include_graphics("figures/Fig3.4.RPI.Spatial.Gap.Map.png")
+```
+
+Mean RPI over the `r Facts$rpi$layers` hydrological years was `r fx(rr_mean, 3)` in the Rhino Range and `r fx(ex_mean, 3)` in the expansion zone (park: `r fx(tw_mean, 3)`; `r tref("zones")`, `r fref("rpi-violin")`). The difference of `r fx(rr_mean - ex_mean, 3)`, or `r pc((rr_mean - ex_mean) / ex_mean * 100, 0)` of the expansion-zone mean, is about `r fx((rr_mean - ex_mean) / sd_px, 2)` of the pixel-level standard deviation (about `r fx(sd_px, 2)`), so the two distributions overlap strongly. Every zone mean is below 1: on average actual productivity reaches roughly `r fx(mean_all[1] * 100, 0)`-`r fx(mean_all[2] * 100, 0)`% of the potential estimated by the RPI model [@lomax2025].
+
+```{r f-rpi-violin, fig.cap = cap("rpi-violin"), out.width = "88%"}
+knitr::include_graphics("figures/Fig3.1.RPI.Distribution.Comparison.png")
+```
+
+Annual means of the two zones are positively correlated (r = `r fx(r_annual, 2)`; `r fref("rpi-timeseries")`). The Rhino Range was more productive than the expansion zone in `r sum(Gan$RPI.Gap > 0)` of `r nrow(Gan)` years, and the annual gap ranged from `r sprintf("%+.3f", min(Gan$RPI.Gap))` (`r Gan$Hydro.Year[which.min(Gan$RPI.Gap)]`) to `r sprintf("%+.3f", max(Gan$RPI.Gap))` (`r Gan$Hydro.Year[which.max(Gan$RPI.Gap)]`), with a mean of `r fx(gap_mean, 3)` (`r fref("rpi-gap")`). The gap has no trend: the Theil-Sen slope is `r sprintf("%+.5f", Gtr$Sen.Slope)` per year (95% confidence interval `r sprintf("%+.4f", Gtr$CI.Lower)` to `r sprintf("%+.4f", Gtr$CI.Upper)`; p = `r fx(Gtr$P.Value)`), and the mean gap was `r fx(gap_pre, 3)` before the 2008-09 hydrological year and `r fx(gap_post, 3)` from then on.
+
+```{r f-rpi-ts, fig.cap = cap("rpi-timeseries"), out.width = "88%"}
+knitr::include_graphics("figures/Fig3.2.RPI.TimeSeries.RollingMean.png")
+```
+
+```{r f-rpi-gap, fig.cap = cap("rpi-gap"), out.width = "88%"}
+knitr::include_graphics("figures/Fig3.3.Gap.Trajectory.png")
+```
+
+No zone shows a significant trend in annual mean RPI: slopes range from `r sprintf("%+.4f", min(Ztr$Sen.Slope))` to `r sprintf("%+.4f", max(Ztr$Sen.Slope))` per year and all p-values are `r fx(floor(min(Ztr$P.Value) * 100) / 100, 2)` or higher (`r tref("rpi-trends")`). At pixel level `r pc(tp(Z.TW, "No Significant Trend"))` of the park's pixels have no significant trend, `r pc(tp(Z.TW, "Significant Increase"))` increase and `r pc(tp(Z.TW, "Significant Decrease"))` decrease; in the Rhino Range the shares are `r pc(tp(Z.RR, "Significant Increase"))` and `r pc(tp(Z.RR, "Significant Decrease"))`. Significant declines cluster along the north-western margin of the park and significant increases in the south and south-west (`r fref("trend-maps")`).
+
+```{r t-trends}
+Tt <- Ztr[match(Z.ALL, Ztr$ZONE), c("ZONE", "Sen.Slope", "Sen.Slope.Per.Decade", "P.Value")]
+Tt$Inc <- vapply(Tt$ZONE, tp, numeric(1), cat = "Significant Increase"); Tt$Dec <- vapply(Tt$ZONE, tp, numeric(1), cat = "Significant Decrease")
+Tt <- rbind(Tt, data.frame(ZONE = "Gap (Rhino Range minus expansion zone)", Sen.Slope = Gtr$Sen.Slope, Sen.Slope.Per.Decade = Gtr$Sen.Slope.Per.Decade, P.Value = Gtr$P.Value, Inc = NA, Dec = NA))
+names(Tt) <- c("Series", "Sen slope (RPI per year)", "Per decade", "p-value", "Pixels with significant increase (%)", "Pixels with significant decrease (%)")
+knitr::kable(Tt, digits = c(0, 5, 4, 2, 1, 1), row.names = FALSE, caption = tab_cap("rpi-trends"))
+```
+
+```{r f-trend, fig.cap = cap("trend-maps"), out.width = "100%"}
+knitr::include_graphics("figures/arrange_Map_SenSlope_Map_SenSlope_Significant_Map_TrendCategory.png")
+```
+
+## Land cover, water-energy fluxes and productivity
+
+The zones differ in land cover and fluxes (`r tref("profile")`). ESA WorldCover fractions give the Rhino Range more shrubland (`r pc(pv(Z.RR, "Shrubland"), 0)` against `r pc(pv(Z.EX, "Shrubland"), 0)` in the expansion zone), less grassland (`r pc(pv(Z.RR, "Grassland"), 0)` against `r pc(pv(Z.EX, "Grassland"), 0)`) and more tree cover (`r pc(pv(Z.RR, "Tree.Cover"), 2)` against `r pc(pv(Z.EX, "Tree.Cover"), 2)`), together with higher GPP (`r fx(pv(Z.RR, "GPP"), 0)` against `r fx(pv(Z.EX, "GPP"), 0)` gC per square metre per year) and canopy transpiration (`r fx(pv(Z.RR, "Canopy"), 1)` against `r fx(pv(Z.EX, "Canopy"), 1)` mm) but lower soil evaporation (`r fx(pv(Z.RR, "Soil.Evap"), 1)` against `r fx(pv(Z.EX, "Soil.Evap"), 1)` mm). The MODIS IGBP class does not separate the zones at all: `r pc(igbp_grass_min, 0)` or more of the pixels in every zone are classed as grassland, which contrasts with the shrubland fractions of ESA WorldCover and illustrates how land-cover products disagree in these savannas.
+
+```{r t-profile}
+Prof.Cols <- c(`Shrubland (%)` = "Shrubland", `Grassland (%)` = "Grassland", `Tree cover (%)` = "Tree.Cover", `Bare ground (%)` = "Bare.Ground",
+               `GPP (gC/m2/yr)` = "GPP", `Ec (mm)` = "Canopy", `Es (mm)` = "Soil.Evap", `Ei (mm)` = "Intercept")
+Pt <- data.frame(Zone = Z.ALL)
+for (nm in names(Prof.Cols)) Pt[[nm]] <- vapply(Pt$Zone, pv, numeric(1), pattern = Prof.Cols[[nm]])
+knitr::kable(Pt, digits = c(0, 1, 1, 2, 2, 1, 1, 1, 2), row.names = FALSE, caption = tab_cap("profile"))
+```
+
+Within zones, a pixel's mean RPI is much more closely tied to the fluxes than to land cover (`r fref("spearman-extended")`). In the park the Spearman correlation is `r fx(sp0(Z.TW, "^GPP"), 2)` with PML_V2 GPP, `r fx(sp0(Z.TW, "^Canopy"), 2)` with canopy transpiration and `r fx(sp0(Z.TW, "^Soil"), 2)` with soil evaporation (for the Rhino Range: `r fx(sp0(Z.RR, "^GPP"), 2)`, `r fx(sp0(Z.RR, "^Canopy"), 2)` and `r fx(sp0(Z.RR, "^Soil"), 2)`), whereas correlations with the land-cover fractions are weak (absolute values of `r fx(lc_cor_max, 2)` or less in the park, the expansion zone and the Rhino Range). RPI is also not higher in pixels with more shrubland (`r fref("shrub-classes")`). The shrubland contrast between zones therefore coincides with the productivity premium without explaining it pixel by pixel. In Ngulia the correlations with land cover are larger (shrubland `r fx(sp0(Z.NG, "^Shrubland"), 2)`, grassland `r fx(sp0(Z.NG, "^Grassland"), 2)`) but rest on a small, split sample.
+
+```{r f-shrub, fig.cap = cap("shrub-classes"), out.width = "100%"}
+knitr::include_graphics("figures/Fig4.4.Shrub.Profiles.png")
+```
+
+```{r f-spearman, fig.cap = cap("spearman-extended"), out.width = "100%"}
+knitr::include_graphics("figures/FigB4.Extended.Heatmap.png")
+```
+
+## Terrain and water
+
+Mean elevation is almost the same in the expansion zone and the Rhino Range (`r fx(zv(Terr, Z.EX, "Mean.Elevation"), 0)` and `r fx(zv(Terr, Z.RR, "Mean.Elevation"), 0)` m), but Ngulia Sanctuary lies lower (`r fx(zv(Terr, Z.NG, "Mean.Elevation"), 0)` m; `r fref("elevation")`, `r tref("terrain")`). The Rhino Range is rougher than the expansion zone (mean slope `r fx(zv(Terr, Z.RR, "Mean.Slope"), 1)` against `r fx(zv(Terr, Z.EX, "Mean.Slope"), 1)` degrees; TRI `r fx(zv(Terr, Z.RR, "Mean.TRI"), 1)` against `r fx(zv(Terr, Z.EX, "Mean.TRI"), 1)`) and has a lower wetness index (`r fx(zv(Terr, Z.RR, "Mean.TWI"), 1)` against `r fx(zv(Terr, Z.EX, "Mean.TWI"), 1)`). Whether the relief of the Rhino Range provides security cover or other benefits that the flatter expansion zone lacks cannot be judged from these data.
+
+Water access defined by the stream network does not separate the zones (`r fref("dist-water")`, `r fref("terrain-profiles")`): the mean distance to the nearest drainage line is `r fx(zv(Terr, Z.RR, "Mean.Dist.Water"), 1)` km in the Rhino Range and `r fx(zv(Terr, Z.EX, "Mean.Dist.Water"), 1)` km in the expansion zone; `r pc(zv(Terr, Z.RR, "Pct.Within.2km"), 0)` and `r pc(zv(Terr, Z.EX, "Pct.Within.2km"), 0)` of their pixels lie within 2 km, and `r pc(zv(Terr, Z.RR, "Pct.Within.5km"), 0)` and `r pc(zv(Terr, Z.EX, "Pct.Within.5km"), 0)` within 5 km. Ngulia has the best access (`r pc(zv(Terr, Z.NG, "Pct.Within.2km"), 0)` within 2 km).
+
+```{r t-terrain}
+Tb <- Terr[match(Z.ALL, Terr$ZONE), c("ZONE", "Mean.Elevation", "Mean.Slope", "Mean.TRI", "Mean.TWI", "Mean.Dist.Water", "Pct.Within.2km", "Pct.Within.5km")]
+names(Tb) <- c("Zone", "Elevation (m)", "Slope (deg)", "TRI", "TWI", "Distance to water (km)", "Within 2 km (%)", "Within 5 km (%)")
+knitr::kable(Tb, digits = c(0, 0, 2, 2, 2, 2, 1, 1), row.names = FALSE, caption = tab_cap("terrain"))
+```
+
+```{r f-elev, fig.cap = cap("elevation"), out.width = "62%"}
+knitr::include_graphics("figures/Map.Elevation.png")
+```
+
+```{r f-water, fig.cap = cap("dist-water"), out.width = "62%"}
+knitr::include_graphics("figures/Map.DistToWater.png")
+```
+
+```{r f-terrain-prof, fig.cap = cap("terrain-profiles"), out.width = "88%"}
+knitr::include_graphics("figures/FigB1.Terrain.Profiles.png")
+```
+
+## Habitat suitability
+
+### Black rhino
+
+*Predictors and records.* Of the `r length(Facts$hsm$rhino$predictors_available)` candidate predictors, `r length(Facts$hsm$rhino$predictors_kept)` entered the rhino model (`r tref("predictors")`, `r fref("predictor-corr")`). GBIF returned `r Gq$Records[1]` rhino records for the Tsavo West bounding box since 2010, but `r Gq$With.Uncertainty[1] - Gq$Uncertainty.le.1000m[1]` of the `r Gq$With.Uncertainty[1]` records that report an uncertainty exceed 1,000 m (median `r fx(Gq$Median.Uncertainty.m[1], 0)` m), and `r Gq$Location.Withheld[1]` have their location withheld by the provider; `r Gq$iNaturalist[1]` of the `r Gq$Records[1]` records are iNaturalist observations, whose coordinates are obscured for threatened species. After cleaning, `r Gcr$N[nrow(Gcr)]` record remained (`r tref("gbif")`), far below the `r Facts$hsm$config$Min.Presences` needed, so the Rhino Range supplied the presences (`r fx(Facts$hsm$rhino$presence_cells, 0)` cells).
+
+```{r t-predictors}
+pred_desc <- c(RPI.Mean = "Mean RPI, 2000-2023", RPI.CV = "Coefficient of variation of annual RPI", GPP = "PML_V2 gross primary productivity", Ec = "PML_V2 canopy transpiration",
+               Es = "PML_V2 soil evaporation", Trees = "Tree cover fraction (ESA WorldCover)", Shrubland = "Shrubland fraction (ESA WorldCover)", Grassland = "Grassland fraction (ESA WorldCover)",
+               Bare = "Bare-ground fraction (ESA WorldCover)", Elevation_m = "Elevation (SRTM)", Slope_deg = "Slope", TRI = "Terrain ruggedness index",
+               Pop_log10 = "log10(1 + population density), 2020", Dist_Water_km = "Distance to JRC surface water (km)", rain_annual_mm = "CHIRPS mean annual rainfall 2010-2024",
+               rain_dry_mm = "CHIRPS mean dry-season rainfall", rain_cv = "CHIRPS inter-annual rainfall variability", ndvi_mean = "MODIS NDVI, mean", ndvi_dry_mean = "MODIS NDVI, dry-season mean")
+Pr <- data.frame(Predictor = Facts$hsm$rhino$predictors_available)
+Pr$Description <- unname(pred_desc[Pr$Predictor])
+Pr$`Rhino model` <- ifelse(Pr$Predictor %in% Facts$hsm$rhino$predictors_kept, "used",
+                    ifelse(Pr$Predictor %in% c("Pop_log10", "rain_annual_mm", "rain_dry_mm", "rain_cv"), "excluded by design", "removed (collinear)"))
+Pr$`Cheetah expert prior` <- ifelse(Pr$Predictor %in% Prior$Variable, "used", "-")
+knitr::kable(Pr, row.names = FALSE, caption = tab_cap("predictors"))
+```
+
+```{r f-corr, fig.cap = cap("predictor-corr"), out.width = "100%"}
+knitr::include_graphics("figures/Predictor_correlations.png")
+```
+
+```{r t-gbif}
+Gt <- data.frame(Step = Gcr$Step, Rhino = Gcr$N, Cheetah = Gcc$N[match(Gcr$Step, Gcc$Step)])
+names(Gt) <- c("Cleaning step", "Black rhino (records)", "Cheetah (records)")
+knitr::kable(Gt, row.names = FALSE, caption = tab_cap("gbif"))
+```
+
+*Accuracy and drivers.* On held-out spatial blocks the model reached an AUC-ROC of `r fx(mean(Met$AUC.ROC), 3)` (standard deviation `r fx(sd(Met$AUC.ROC), 3)` across repetitions), an AUC-PR of `r fx(mean(Met$AUC.PR), 3)` and a true skill statistic of `r fx(mean(Met$TSS), 2)` (`r tref("accuracy")`). Because the presences are one compact, managed block of habitat, these values show mainly that the Rhino Range is environmentally distinct from the rest of the park; they do not validate the map as a prediction of where rhinos would choose to live. The predictors with the largest permutation importance are soil evaporation, distance to JRC surface water and elevation, followed by slope, shrubland and RPI (`r fref("importance")`). Along each gradient (`r fref("response")`), mean HSI rises steeply from `r fx(ri("Slope_deg", 0.7), 2)` at 0.7 degrees of slope to `r fx(ri("Slope_deg", 3), 2)` at 3 degrees and stays level above that; falls sharply once soil evaporation exceeds about 47 mm (from `r fx(ri("Es", 46), 2)` at 46 mm to `r fx(ri("Es", 52), 2)` at 52 mm); peaks at about `r fx(peak("Elevation_m"), 0)` m of elevation; rises with RPI from `r fx(ri("RPI.Mean", 0.65), 2)` at 0.65 to `r fx(ri("RPI.Mean", 0.81), 2)` at 0.81 and flattens above that; and increases with shrubland cover. HSI also increases with distance to JRC surface water, from `r fx(ri("Dist_Water_km", 5), 2)` at 5 km to `r fx(ri("Dist_Water_km", 10), 2)` at 10 km. Because JRC maps open surface water, this is unlikely to be a rhino preference for dry ground: the Rhino Range lies farther from JRC-mapped water (mean `r fx(wz("JRC", Z.RR, "Mean.Dist.km"), 1)` km) than the expansion zone (`r fx(wz("JRC", Z.EX, "Mean.Dist.km"), 1)` km; `r tref("water-zone")`), so the model learns that distance from mapped water goes with the range.
+
+```{r t-accuracy}
+Mt <- data.frame(Metric = c("AUC-ROC", "AUC-PR", "True skill statistic", "Sensitivity", "Specificity", "Threshold (HSI)"),
+                 Mean = c(mean(Met$AUC.ROC), mean(Met$AUC.PR), mean(Met$TSS), mean(Met$Sensitivity), mean(Met$Specificity), mean(Met$Threshold)),
+                 SD   = c(sd(Met$AUC.ROC), sd(Met$AUC.PR), sd(Met$TSS), sd(Met$Sensitivity), sd(Met$Specificity), sd(Met$Threshold)))
+knitr::kable(Mt, digits = 3, row.names = FALSE, caption = tab_cap("accuracy"))
+```
+
+```{r f-importance, fig.cap = cap("importance"), out.width = "80%"}
+knitr::include_graphics("figures/Black_rhino_HSM_permutation_importance_mean_of_10_runs.png")
+```
+
+```{r f-response, fig.cap = cap("response"), out.width = "100%"}
+knitr::include_graphics("figures/Black_rhino_HSM_response_curves.png")
+```
+
+*Suitability across the park.* By construction the Rhino Range scores high (mean HSI `r fx(hz(Z.RR, "Mean.HSI"), 2)`; `r pc(hz(Z.RR, "Pct.Suitable"), 0)` of its cells at or above the threshold). In the expansion zone mean HSI is `r fx(hz(Z.EX, "Mean.HSI"), 2)` and only `r pc(hz(Z.EX, "Pct.Suitable"), 1)` of cells (`r fx(hz(Z.EX, "Suitable.km2"), 0)` km^2^ of `r fx(hz(Z.EX, "Area.km2"), 0)` km^2^) reach the threshold (`r tref("zone-hsi")`, `r fref("hsi-rhino")`, `r fref("hsi-zone")`). The standard deviation of HSI across repetitions is below 0.10 in `r pc(sdz(Z.TW, "Pct.SD.below.0.10"), 0)` of the park's cells and above 0.20 in only `r pc(sdz(Z.TW, "Pct.SD.above.0.20"), 1)` (maximum `r fx(sdz(Z.TW, "Max.SD"), 2)`); the highest values lie mainly along the south-western edge of the Rhino Range, where HSI changes from high to low (`r fref("hsi-sd")`).
+
+```{r t-zone-hsi}
+Ht <- Hs[match(c(Z.TW, Z.EX, Z.RR, Z.NG), Hs$Unit), c("Unit", "Area.km2", "Mean.HSI", "Median.HSI", "Pct.Suitable", "Suitable.km2")]
+names(Ht) <- c("Zone", "Cells with data (km2)", "Mean HSI", "Median HSI", "At or above threshold (%)", "At or above threshold (km2)")
+knitr::kable(Ht, digits = c(0, 0, 3, 3, 1, 0), format.args = list(big.mark = ","), row.names = FALSE, caption = tab_cap("zone-hsi"))
+```
+
+```{r f-hsi-rhino, fig.cap = cap("hsi-rhino"), out.width = "62%"}
+knitr::include_graphics("figures/Map.HSI.Rhino.png")
+```
+
+```{r f-hsi-zone, fig.cap = cap("hsi-zone"), out.width = "100%"}
+knitr::include_graphics("figures/HSI_by_zone.png")
+```
+
+```{r f-hsi-sd, fig.cap = cap("hsi-sd"), out.width = "62%"}
+knitr::include_graphics("figures/Rhino_HSI_uncertainty.png")
+```
+
+*Candidate expansion habitat and the choice of water layer.* Within 5 km of JRC-mapped surface water, `r fx(Cand$Area.km2[1], 0)` km^2^ of the expansion zone is Rhino-Range-like and a further `r fx(Cand$Area.km2[2], 0)` km^2^ belongs to the relatively best 20% (`r tref("candidates")`, `r fref("candidates")`). The candidate cells are small and scattered: the largest concentrations lie along the western boundary of the park south of the Rhino Range, on the north-eastern boundary and in one patch in the south. The result depends strongly on the water layer. Before any water screen, the two models find a similar area at or above their thresholds in the expansion zone (`r fx(S1$Expansion.Zone.above.threshold.km2, 0)` and `r fx(S2$Expansion.Zone.above.threshold.km2, 0)` km^2^) and similar accuracy (AUC-ROC `r fx(S1$AUC.ROC, 3)` with JRC water and `r fx(S2$AUC.ROC, 3)` with the stream network). What differs is the screen, because the two layers place the zones very differently (`r tref("water-zone")`). JRC maps open surface water, which is scarce in this landscape: `r pc(wz("JRC", Z.EX, "Pct.Within.5km"), 0)` of the expansion zone lies within 5 km of it, but only `r pc(wz("JRC", Z.RR, "Pct.Within.5km"), 0)` of the Rhino Range does, and none of Ngulia Sanctuary (mean distance `r fx(wz("JRC", Z.NG, "Mean.Dist.km"), 0)` km). The JRC screen therefore rejects most of the habitat that rhinos already use, and it keeps only `r pc(S1$Candidate.RangeLike.km2 / S1$Expansion.Zone.above.threshold.km2 * 100, 0)` of the Rhino-Range-like area of the expansion zone. The stream network derived from the DEM includes seasonal drainage lines and places the three zones at similar distances (`r pc(wz("Whitebox", Z.EX, "Pct.Within.5km"), 0)`, `r pc(wz("Whitebox", Z.RR, "Pct.Within.5km"), 0)` and `r pc(wz("Whitebox", Z.NG, "Pct.Within.5km"), 0)` within 5 km in the expansion zone, the Rhino Range and Ngulia), so the screen keeps `r pc(S2$Candidate.RangeLike.km2 / S2$Expansion.Zone.above.threshold.km2 * 100, 0)` of the area. The result is `r fx(S2$Candidate.RangeLike.km2, 0)` km^2^ of Rhino-Range-like habitat within 5 km of water with the stream network, against `r fx(S1$Candidate.RangeLike.km2, 0)` km^2^ with JRC water. Because the JRC layer clearly misses water that is available to rhinos in Ngulia, the lower figure is best read as a conservative lower bound, and which definition of water matters to rhinos in Tsavo West remains the largest open question for expansion planning.
+
+```{r t-water-zone}
+Water.Cols <- c(`JRC: mean distance (km)` = "JRC|Mean.Dist.km", `JRC: within 5 km (%)` = "JRC|Pct.Within.5km",
+                `Stream network: mean distance (km)` = "Whitebox|Mean.Dist.km", `Stream network: within 5 km (%)` = "Whitebox|Pct.Within.5km")
+Wt <- data.frame(Zone = c(Z.EX, Z.RR, Z.NG))
+for (nm in names(Water.Cols)) { a <- strsplit(Water.Cols[[nm]], "|", fixed = TRUE)[[1]]; Wt[[nm]] <- vapply(Wt$Zone, function(u) wz(a[1], u, a[2]), numeric(1)) }
+knitr::kable(Wt, digits = c(0, 1, 0, 1, 0), row.names = FALSE, caption = tab_cap("water-zone"))
+```
+
+```{r t-candidates}
+Ct <- data.frame(
+  Measure = c("Expansion zone, all 500 m cells (km2)", "Expansion zone, cells at or above the model threshold (km2)", "Expansion zone, cells within 5 km of water (km2)", "Rhino-Range-like cells within 5 km of water (km2)",
+              "Relatively best 20% within 5 km of water (km2)", "AUC-ROC of the model", "Mean HSI of the expansion zone"),
+  `JRC surface water (default)` = c(wz("JRC", Z.EX, "Cells") * 0.25, S1$Expansion.Zone.above.threshold.km2, S1$Cells.within.5km.of.water.in.expansion.zone.km2, S1$Candidate.RangeLike.km2, S1$Candidate.Best20.km2, S1$AUC.ROC, S1$Mean.HSI.Expansion.Zone),
+  `Stream network (Section 3.3)` = c(wz("Whitebox", Z.EX, "Cells") * 0.25, S2$Expansion.Zone.above.threshold.km2, S2$Cells.within.5km.of.water.in.expansion.zone.km2, S2$Candidate.RangeLike.km2, S2$Candidate.Best20.km2, S2$AUC.ROC, S2$Mean.HSI.Expansion.Zone),
+  check.names = FALSE)
+ct_fmt <- function(x, i) ifelse(i <= 5, formatC(x, format = "f", digits = 0, big.mark = ","), formatC(x, format = "f", digits = 3))
+Ct[[2]] <- ct_fmt(Ct[[2]], 1:7); Ct[[3]] <- ct_fmt(Ct[[3]], 1:7)
+knitr::kable(Ct, row.names = FALSE, caption = tab_cap("candidates"))
+```
+
+```{r f-candidates, fig.cap = cap("candidates"), out.width = "62%"}
+knitr::include_graphics("figures/Candidate_rhino_expansion_habitat_within_5_km_of_water.png")
+```
+
+### Cheetah
+
+GBIF returned `r Gq$Records[2]` cheetah records for the TCA bounding box since 2010, but `r Gq$With.Uncertainty[2] - Gq$Uncertainty.le.1000m[2]` of the `r Gq$With.Uncertainty[2]` records that report an uncertainty exceed 1,000 m (median `r fx(Gq$Median.Uncertainty.m[2], 0)` m); `r Gq$Location.Withheld[2]` have withheld locations and `r Gq$iNaturalist[2]` are iNaturalist observations, again obscured for a threatened species. After cleaning, `r Facts$hsm$cheetah$precise_presences` records remained (`r tref("gbif")`), so the cheetah map uses the expert-prior index (`r tref("prior")`). It classifies `r pc(hz("Tsavo West NP", "Pct.Suitable", Hc), 0)` of Tsavo West NP, `r pc(hz("Tsavo East NP", "Pct.Suitable", Hc), 0)` of Tsavo East NP, `r pc(hz("Chyulu Hills NP", "Pct.Suitable", Hc), 0)` of Chyulu Hills NP, `r pc(hz("TTWCA ranches", "Pct.Suitable", Hc), 0)` of the TTWCA ranches and `r pc(hz("South Kitui NR", "Pct.Suitable", Hc), 0)` of South Kitui NR as suitable, where 'suitable' means the top third of the study area's HSI values (`r tref("cheetah-units")`, `r fref("hsi-cheetah")`). These shares describe the index, not cheetah occupancy. The `r Facts$hsm$cheetah$reality_check$n` precise records fall on average at percentile `r Facts$hsm$cheetah$reality_check$mean_percentile` of the HSI distribution (50 would be chance), which is too few points to support or reject the index.
+
+```{r t-prior}
+Pp <- Prior[, c("Variable", "Type", "a", "b", "c", "d", "Weight", "Rationale")]
+for (v in c("a", "b", "c", "d")) Pp[[v]] <- ifelse(is.na(Pp[[v]]) | is.infinite(Pp[[v]]), "-", formatC(Pp[[v]], format = "g"))
+names(Pp) <- c("Predictor", "Scale", "a", "b", "c", "d", "Weight", "Rationale")
+knitr::kable(Pp, row.names = FALSE, caption = tab_cap("prior"))
+```
+
+Suitability is 0 below *a*, rises to 1 at *b*, stays 1 up to *c* and falls to 0 at *d* (a dash means unbounded). Scale 'abs' uses the predictor's own units and 'q' uses quantiles of the study area. Suitabilities are combined as a weighted geometric mean with a floor of 0.01.
+
+```{r t-cheetah-units}
+Cu <- Hc[, c("Unit", "Area.km2", "Mean.HSI", "Median.HSI", "Pct.Suitable", "Suitable.km2")]
+names(Cu) <- c("Management unit", "Cells with data (km2)", "Mean HSI", "Median HSI", "Suitable (%)", "Suitable (km2)")
+knitr::kable(Cu, digits = c(0, 0, 3, 3, 1, 0), format.args = list(big.mark = ","), row.names = FALSE, caption = tab_cap("cheetah-units"))
+```
+
+```{r f-hsi-cheetah, fig.cap = cap("hsi-cheetah"), out.width = "62%"}
+knitr::include_graphics("figures/Map.HSI.Cheetah.png")
+```
+
+# Discussion
+
+## What the productivity record says about expansion
+
+The Rhino Range is more productive than the rest of the park by about `r fx(rr_mean - ex_mean, 2)` RPI units, a modest difference relative to the spread among pixels, and the difference is persistent rather than growing: it was positive in `r sum(Gan$RPI.Gap > 0)` of `r nrow(Gan)` years, averaged `r fx(gap_pre, 2)` before and `r fx(gap_post, 2)` after the 2008-09 hydrological year, and has no trend. A 3,000 km^2^ IPZ was established in 2008 [Okita-Ouma et al. 2006, cited in @khayale2025], so the record gives no sign that the gap widened after the zone was created; it is more consistent with differences in site conditions, such as the denser shrubland (`r pc(pv(Z.RR, "Shrubland"), 0)` against `r pc(pv(Z.EX, "Shrubland"), 0)` of cover) and higher canopy transpiration of the Rhino Range, than with an effect of protection that has built up over time. The RPI is a coarse annual index that cannot resolve forage quality or browse structure, so this inference is limited. Equally, no zone shows a decline: rangeland productivity relative to climatic potential has been stable for `r Facts$rpi$layers` years, which is a necessary but not a sufficient condition for supporting more rhinos. Where the carrying capacity of existing sanctuaries is exceeded [Amin et al. 2022, cited in @khayale2025], the expansion zone offers a large area (`r fx(Facts$zone_area_km2$tw_excl_rhino_range, 0)` km^2^) of somewhat less productive but stable rangeland.
+
+## How much of the park resembles the Rhino Range
+
+Only `r pc(hz(Z.EX, "Pct.Suitable"), 0)` of the expansion zone resembles the Rhino Range by the model, and the candidate area within reach of water is smaller still (`r fx(S1$Candidate.RangeLike.km2, 0)` to `r fx(S2$Candidate.RangeLike.km2, 0)` km^2^ depending on the water layer). This is a statement about similarity to an existing, fenced and managed range, not about the quality of rhino habitat. Three features of the design shape the answer. The presences form one compact block, so the model partly learns where the range lies; predictors that vary smoothly in space (population density, coarse rainfall) were excluded for that reason. `r tref("candidates")` shows that the choice of water layer changes the candidate area several-fold, and because only `r pc(wz("JRC", Z.RR, "Pct.Within.5km"), 0)` of the existing Rhino Range lies within 5 km of JRC-mapped water (`r tref("water-zone")`), the lower figure is probably too strict; the 5 km screen is itself an assumption. And similarity is not need: rhinos might use habitat unlike the Rhino Range, which is why the 'relatively best 20%' class is reported alongside the thresholded one. Field validation of water availability in the expansion zone, and of rhino use of the candidate cells, would resolve the largest uncertainties.
+
+## Suitability, infrastructure and risk
+
+The models treat the landscape as open. The SGR and the highways do not appear in them, yet infrastructure determines whether suitable habitat is reachable. In the preliminary collaring study, six of the ten collared elephants crossed the infrastructure within four weeks, but two animals collared south of Voi made no attempt to cross the SGR, and barrier-induced disorientation can lead animals to bounce off fences back onto active highways rather than find underpasses [@okitaouma2016]. Six wildlife underpasses, each about 70 m long and 6 m high, were built, and bridges and culverts offer additional potential crossings [@okitaouma2016]. For roads, the roadkill record shows where risk concentrates: protected-area sections, near rivers, in the dry season and where shrubs line the road [@lala2021]. Where cells of high predicted suitability approach a highway, these results point to where speed limits, roadside clearing and crossing structures should be considered, as Lala et al. [-@lala2021] recommend for the proposed expressway. Linear infrastructure should be added to future models as resistance, and the rhino and cheetah maps should be tested against movement data before they are used to route corridors.
+
+## Cheetah: data needs
+
+Cheetahs occur at low density (0.74 per 100 km^2^) and are patchily distributed in Tsavo, with more records in drier areas [@henschel2020]. Detecting a 10% annual change would take up to 141 surveys [@henschel2020], and the few public GBIF records are obscured by their providers, so opportunistic records cannot yet support a data-driven model. The expert-prior index in this report is a placeholder that makes the workflow runnable and the assumptions explicit; it has not been compared with independent cheetah data, and it contains no rainfall or other variable that could reproduce the higher record frequency in drier areas that Henschel et al. [-@henschel2020] report. Structured surveys, camera traps or collar data from KWS and partners would allow the data-driven model in the analysis script to replace it. Cheetahs also appear among the species recorded in human-wildlife conflict around the parks, which is concentrated in a few regions [@mukeka2020], and local attitudes depend on drought, risk experience and access to grazing land [@muneza2022]. Conflict records and attitude surveys are natural additions to a connectivity analysis, and the co-designed seasonal grazing agreements that Muneza et al. [-@muneza2022] call for would be part of any corridor plan.
+
+## Limitations
+
+* **Data gaps.** The RPI raster has a strip without data through the Rhino Range and Ngulia Sanctuary (`r tref("zones")`); the analysis does not fill it, and Ngulia statistics rest on about half of the sanctuary.
+* **Double counting.** Ngulia pixels are counted twice in the combined Rhino Range statistics (Section 3.2); the effect on zone means is below 0.001.
+* **Land-cover products disagree.** MODIS IGBP classes `r pc(igbp_grass_min, 0)` or more of the pixels in every zone as grassland, whereas ESA WorldCover fractions give mean shrubland cover of `r fx(shrub_rng[1], 0)`-`r fx(shrub_rng[2], 0)`% in the zones, so conclusions about land cover depend on the product.
+* **Boundaries differ from published figures.** The IPZ polygon (`r fx(Facts$zone_area_km2$ipz, 0)` km^2^) and Ngulia polygon (`r fx(Facts$zone_area_km2$ngulia, 0)` km^2^) differ slightly from the reported values (about 3,000 and 92 km^2^).
+* **Water.** JRC surface water and the DEM-derived stream network give very different candidate areas (`r tref("candidates")`); the JRC layer misses water that rhinos use in Ngulia, neither layer has been checked against ground data, and the drainage-line threshold (5,000 upslope cells) has not been calibrated.
+* **Presences.** The rhino model uses a proxy for presence, and the cheetah index is unvalidated.
+* **Resolution.** The 500 m grid is coarser than the features that matter for security and browse, and the RPI is an annual index on cells of about 460 m.
+* **Data status.** The RPI v2 data set is described by its creators as unpublished work that is subject to change, and they ask to be contacted before use in published outputs [@lomax2025data].
+
+# Conclusions and recommendations
+
+1. The Rhino Range is about `r fx(rr_mean - ex_mean, 2)` RPI units more productive than the rest of Tsavo West, and the difference is stable over `r Facts$rpi$layers` hydrological years; no zone shows a significant trend in mean RPI.
+2. Only about `r pc(hz(Z.EX, "Pct.Suitable"), 0)` of the expansion zone (`r fx(hz(Z.EX, "Suitable.km2"), 0)` km^2^) resembles the Rhino Range. Within 5 km of water the Rhino-Range-like area is `r fx(S1$Candidate.RangeLike.km2, 0)`-`r fx(S2$Candidate.RangeLike.km2, 0)` km^2^, depending on whether water is taken from JRC surface-water maps (probably too strict, because it would also exclude most of the existing Rhino Range) or from the DEM-derived stream network. Ground-truthing water in the expansion zone is the priority before habitat is committed to expansion.
+3. Precise rhino and cheetah records (KWS, AWF, SMART patrols, camera traps, collars) are the biggest improvement available: they replace the range proxy and the expert prior with validated, data-driven models. Precise locations are sensitive and should not be shared; only the suitability rasters should be.
+4. Railway and highway barriers, human-wildlife conflict and community attitudes should be added to the models before they are used to plan corridors, using the evidence in the Tsavo studies cited here.
+5. The data issues listed in Section 5.5 (no-data strip, land-cover disagreement, boundary differences) should be resolved at source.
+
+# Reproducibility and data availability
+
+*How to regenerate this report.* (1) Open *Mureithi_RPI_TsavoWest_Rhino_Expansion.Rproj* in RStudio. (2) Edit the four absolute raster paths (RPI, RPI temporal performance, PML_V2 and land cover) in the data-import chunks of *scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd*. (3) Optionally run *scripts/gee/01_TCA_HSM_predictors_export.js* in Google Earth Engine and download the exports into *data/gee_exports/*. (4) Run `source("scripts/Report_Assets.R")` to re-run the analysis and write *report/figures* and *report/results* (about 10 minutes on the computer used for this report). (5) Knit *report/Tsavo_HSM_Report.Rmd*. The knit stops if any generated figure has no caption in this report, or if the data no longer support a qualitative statement in the text.
+
+*Data availability.* The RPI v2 data set is archived on Zenodo under a CC BY 4.0 licence [@lomax2025data]; its record asks users to contact the creators before using it in published outputs. GBIF records are public; the licence of each record is stated in GBIF, and the iNaturalist records among them are often licensed CC BY-NC, so they must be credited and not used commercially. The records were downloaded with the *rgbif* function `occ_data()`, which does not issue a citable download DOI; request one with `occ_download()` for published work. Precise rhino and cheetah locations are poaching- and persecution-sensitive and are not distributed with the code; the suitability rasters are written to *outputs/HSM/* and can be shared without them. The code is released under the GNU General Public Licence v3.
+
+# Appendix A: additional figures {-}
+
+```{r a-africa, fig.cap = cap("app-africa"), out.width = "55%"}
+knitr::include_graphics("figures/Africa_Country_Boundaries.png")
+```
+
+```{r a-kenya, fig.cap = cap("app-kenya"), out.width = "50%"}
+knitr::include_graphics("figures/Kenya_s_Administrative_Boundary.png")
+```
+
+```{r a-pas, fig.cap = cap("app-pas"), out.width = "50%"}
+knitr::include_graphics("figures/Kenya_Terrestrial_Protected_Areas.png")
+```
+
+```{r a-tw, fig.cap = cap("app-tw"), out.width = "45%"}
+knitr::include_graphics("figures/Tsavo_West_National_Park.png")
+```
+
+```{r a-ngulia, fig.cap = cap("app-ngulia"), out.width = "45%"}
+knitr::include_graphics("figures/Ngulia_Sanctuary_Rhino_Expansion_Area_within_Tsavo_West_NP.png")
+```
+
+```{r a-ipz, fig.cap = cap("app-ipz"), out.width = "45%"}
+knitr::include_graphics("figures/Tsavo_West_Intensive_Protection_Zone_within_Tsavo_West_NP.png")
+```
+
+```{r a-range, fig.cap = cap("app-range"), out.width = "45%"}
+knitr::include_graphics("figures/Tsavo_West_Rhino_Range_Ngulia_Sanctuary_Intensive_Protection_Zone_with.png")
+```
+
+```{r a-rpi-tw, fig.cap = cap("app-rpi-tw"), out.width = "55%"}
+knitr::include_graphics("figures/Spatial_Distribution_of_Mean_RPI_in_Tsavo_West_NP.png")
+```
+
+```{r a-rpi-ng, fig.cap = cap("app-rpi-ng"), out.width = "55%"}
+knitr::include_graphics("figures/Spatial_Distribution_of_Mean_RPI_in_Ngulia_Sanctuary.png")
+```
+
+```{r a-rpi-ipz, fig.cap = cap("app-rpi-ipz"), out.width = "55%"}
+knitr::include_graphics("figures/Spatial_Distribution_of_Mean_RPI_in_Tsavo_West_s_Intensive_Protection_.png")
+```
+
+```{r a-rpi-rr, fig.cap = cap("app-rpi-rr"), out.width = "55%"}
+knitr::include_graphics("figures/Spatial_Distribution_of_Mean_RPI_in_Tsavo_West_Rhino_Range.png")
+```
+
+```{r a-quality, fig.cap = cap("app-quality"), out.width = "100%"}
+knitr::include_graphics("figures/arrange_Map_MAE_Map_RMSE_Map_Rsqd.png")
+```
+
+```{r a-pml, fig.cap = cap("app-pml"), out.width = "85%"}
+knitr::include_graphics("figures/arrange_PMLv_GPP_Map_PMLv_EC_Map_PMLv_ES_Map_PMLv_EI_Map.png")
+```
+
+```{r a-landcover, fig.cap = cap("app-landcover"), out.width = "85%"}
+knitr::include_graphics("figures/arrange_StudyPixelsKenya_IGBP_Map_StudyPixelsKenya_Trees_Map_StudyPixe.png")
+```
+
+```{r a-sen, fig.cap = cap("app-sen"), out.width = "55%"}
+knitr::include_graphics("figures/Map.SenSlope.png")
+```
+
+```{r a-sen-sig, fig.cap = cap("app-sen-sig"), out.width = "55%"}
+knitr::include_graphics("figures/Map.SenSlope.Significant.png")
+```
+
+```{r a-trend-cat, fig.cap = cap("app-trend-cat"), out.width = "55%"}
+knitr::include_graphics("figures/Map.TrendCategory.png")
+```
+
+```{r a-hex-shrub, fig.cap = cap("app-hex-shrub"), out.width = "95%"}
+knitr::include_graphics("figures/Fig4.1.RPI.Shrub.png")
+```
+
+```{r a-hex-grass, fig.cap = cap("app-hex-grass"), out.width = "95%"}
+knitr::include_graphics("figures/Fig4.2.RPI.Grass.png")
+```
+
+```{r a-spearman, fig.cap = cap("app-spearman"), out.width = "95%"}
+knitr::include_graphics("figures/Fig4.3.Correlation.Heatmap.png")
+```
+
+```{r a-slope, fig.cap = cap("app-slope"), out.width = "55%"}
+knitr::include_graphics("figures/Map.Slope.png")
+```
+
+```{r a-tri, fig.cap = cap("app-tri"), out.width = "55%"}
+knitr::include_graphics("figures/Map.TRI.png")
+```
+
+```{r a-twi, fig.cap = cap("app-twi"), out.width = "55%"}
+knitr::include_graphics("figures/Map.TWI.png")
+```
+
+```{r a-hydro, fig.cap = cap("app-hydro"), out.width = "55%"}
+knitr::include_graphics("figures/Map.Hydro.Combined.png")
+```
+
+```{r a-rpi-elev, fig.cap = cap("app-rpi-elev"), out.width = "95%"}
+knitr::include_graphics("figures/FigB2.RPI.Elevation.png")
+```
+
+```{r a-rpi-water, fig.cap = cap("app-rpi-water"), out.width = "95%"}
+knitr::include_graphics("figures/FigB3.RPI.DistWater.png")
+```
+
+# Appendix B: data and software {-}
+
+```{r t-inventory}
+Inv <- rd("data_inventory.csv")
+Inv$file <- ifelse(nchar(Inv$file) > 70, paste0("...", substring(Inv$file, nchar(Inv$file) - 66)), Inv$file)
+Inv <- Inv[, c("file", "size_MB", "md5")]
+names(Inv) <- c("File", "Size (MB)", "MD5 checksum")
+knitr::kable(Inv, row.names = FALSE, caption = tab_cap("app-inventory"))
+```
+
+```{r t-software}
+Pkg <- rd("package_versions.csv")
+keep <- c("terra", "sf", "tmap", "ranger", "rgbif", "trend", "slider", "dplyr", "tidyr", "readr", "ggplot2", "patchwork", "tidyterra", "elevatr", "whitebox", "scico", "here", "knitr", "rmarkdown", "jsonlite", "magick", "ragg")
+Pkg <- Pkg[match(keep, Pkg$package), ]; Pkg <- Pkg[!is.na(Pkg$package), ]
+rv  <- sub("^R version ", "", grep("^R version", readLines(file.path(Res.Dir, "session_info.txt"), warn = FALSE), value = TRUE)[1])
+Sw  <- rbind(data.frame(package = "R", version = rv), Pkg)
+names(Sw) <- c("Software", "Version")
+knitr::kable(Sw, row.names = FALSE, caption = tab_cap("app-software"))
+```
+
+# References {-}
+
+::: {#refs}
+:::

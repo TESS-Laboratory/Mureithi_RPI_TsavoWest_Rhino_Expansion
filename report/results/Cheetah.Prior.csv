@@ -1,0 +1,8 @@
+"Variable","Type","a","b","c","d","Weight","Rationale"
+"Trees","abs",-Inf,-Inf,0.1,0.5,2,"hunts by sight: avoids closed woody cover"
+"Shrubland","abs",-Inf,-Inf,0.5,0.95,1,"dense bush limits visibility (lenient: Tsavo is bushland)"
+"Grassland","abs",0,0.2,1,1,1.5,"open grassland / savanna = hunting habitat"
+"RPI.Mean","q",0.1,0.6,1,1,1.5,"productive rangeland supports gazelle / impala prey"
+"Slope_deg","abs",-Inf,-Inf,3,15,1,"avoids steep, rugged ground"
+"Pop_log10","q",NA,NA,0.5,0.95,1,"avoids dense human settlement"
+"Dist_Water_km","abs",-Inf,-Inf,15,40,0.5,"independent of water for days: weak effect"

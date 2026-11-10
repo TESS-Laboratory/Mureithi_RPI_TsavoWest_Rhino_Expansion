@@ -1,0 +1,69 @@
+{
+  "generated": "2026-11-10 16:03",
+  "analysis": "Mureithi_Tsavo_Habitat_Intelligence.Rmd",
+  "analysis_md5": "6569851d7a3491cde72f0fe441db0711",
+  "git_commit": "2306b99",
+  "git_dirty": true,
+  "zone_area_km2": {
+    "tsavo_west": 7020,
+    "ngulia": 101,
+    "ipz": 3034,
+    "rhino_range": 3034,
+    "tw_excl_rhino_range": 3996,
+    "cheetah_study_area": 32936,
+    "cheetah_units": {
+      "Tsavo East NP": 12984,
+      "Tsavo West NP": 7024,
+      "South Kitui NR": 1945,
+      "Chyulu Hills NP": 734,
+      "TTWCA ranches": 3788
+    }
+  },
+  "rpi": {
+    "layers": 23,
+    "resolution_deg": 0.00416666666666667,
+    "first_layer": "2000-01",
+    "last_layer": "2022-23"
+  },
+  "gbif": {
+    "rhino_file": "2026-11-10",
+    "cheetah_file": "2026-11-10"
+  },
+  "hsm": {
+    "config": {
+      "Grain.m": 500,
+      "CRS": "EPSG:32737",
+      "Year.Min": 2010,
+      "Max.Unc.m": 1000,
+      "Min.Presences": 30,
+      "N.Iter": 10,
+      "Split": 0.7,
+      "N.Trees": 500,
+      "Max.Train": 2000,
+      "Corr.Max": 0.7
+    },
+    "seeds": [35, 68, 43, 54, 17, 46, 76, 88, 24, 12],
+    "rhino": {
+      "cells_complete": 25551,
+      "cells_study_area": 28135,
+      "presence_cells": 10680,
+      "predictors_available": ["RPI.Mean", "RPI.CV", "GPP", "Ec", "Es", "Trees", "Shrubland", "Grassland", "Bare", "Elevation_m", "Slope_deg", "TRI", "Pop_log10", "Dist_Water_km", "rain_annual_mm", "rain_cv", "rain_dry_mm", "ndvi_mean", "ndvi_dry_mean"],
+      "predictors_kept": ["RPI.Mean", "Shrubland", "Trees", "Bare", "Dist_Water_km", "Slope_deg", "Elevation_m", "RPI.CV", "Es"],
+      "threshold": 0.47,
+      "top20_cutoff": 0.260588253968254
+    },
+    "cheetah": {
+      "cells_complete": 118910,
+      "cells_study_area": 131743,
+      "precise_presences": 2,
+      "mode": "prior",
+      "predictors_available": ["RPI.Mean", "RPI.CV", "GPP", "Ec", "Es", "Trees", "Shrubland", "Grassland", "Bare", "Elevation_m", "Slope_deg", "TRI", "Pop_log10", "Dist_Water_km", "rain_annual_mm", "rain_cv", "rain_dry_mm", "ndvi_mean", "ndvi_dry_mean"],
+      "predictors_kept": ["RPI.Mean", "Shrubland", "Trees", "Bare", "Dist_Water_km", "Slope_deg", "Elevation_m", "Pop_log10", "RPI.CV", "GPP", "rain_annual_mm", "rain_dry_mm"],
+      "threshold": 0.612215661965334,
+      "reality_check": {
+        "n": 2,
+        "mean_percentile": 93
+      }
+    }
+  }
+}
