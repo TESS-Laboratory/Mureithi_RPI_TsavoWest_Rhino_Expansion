@@ -4,9 +4,9 @@ This repository contains the data and code used to reproduce the analyses, figur
 
 A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]
 
-Use of this code is licensed under Licence: [![Licence: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0).
+Use of this code is licensed under Licence: [![Licence: GPL v3] (https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0).
 
-Contact Isaac Nduta Mureithi at [IMureithi@awf.org / I.N.Mureithi@exeter.ac.uk] (ORCID: [[ORCID iD](https://orcid.org/0009-0009-2318-2568)]).
+Contact Isaac Mureithi at [IMureithi@awf.org / I.N.Mureithi@exeter.ac.uk] (ORCID: [[ORCID iD](https://orcid.org/0009-0009-2318-2568)]).
 
 ## Project overview
 
@@ -60,7 +60,7 @@ Not included in the repository:
 | *data/gee_exports/* | GeoTIFFs downloaded from Google Drive after running the Earth Engine script. | Reproducible by running *scripts/gee/01_TCA_HSM_predictors_export.js*. |
 | *data/Terrain/TCA_DEM.tif* | SRTM DEM for the Tsavo Conservation Area. | Downloaded automatically by Section 5 on first run. |
 | *outputs/HSM/* | Habitat suitability rasters and tables (listed below). | Written when Section 5 is run. Only the rasters should be shared, never point locations. |
-| *report/Tsavo_HSM_Report.docx and .html* | Knitted outputs; regenerate by knitting the Rmd.” The figures and results are committed, so anyone can knit the report without your OneDrive rasters. |
+| *report/Tsavo_HSM_Report.docx and .html* | Knitted outputs; regenerate by knitting the Rmd.” | The figures and results are committed, so anyone can knit the report without your OneDrive rasters. |
 
 The four absolute raster paths (RPI, RPI temporal performance, PML_V2, StudyPixels) are written as absolute paths in the data-import chunks of the script; edit them to point to your copy.
 
