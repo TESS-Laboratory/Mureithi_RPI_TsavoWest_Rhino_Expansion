@@ -1,8 +1,6 @@
 # Habitat Intelligence Framework for Black Rhino Expansion in Tsavo West National Park (RPI, terrain and habitat suitability models)
 
-This repository contains the data and code used to reproduce the analyses, figures and tables presented in:
-
-[Mureithi I.N., Author B. & Author C. (Year). Title. Journal / thesis / report. DOI: https://doi.org/... - to be added]
+This repository contains the data and code used to reproduce the analyses, figures, tables and report for a habitat intelligence study of black rhino expansion in Tsavo West National Park and cheetah in the Tsavo Conservation Area. Journal reference: [to be added].
 
 A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]
 
@@ -22,6 +20,8 @@ This project asks whether Tsavo West National Park (Kenya) can support an expans
 |---|---|
 | *scripts/Mureithi_Tsavo_Habitat_Intelligence.Rmd* | The full workflow as one R Markdown file, organised in sections (table below). Run its chunks in order. |
 | *scripts/gee/01_TCA_HSM_predictors_export.js* | Google Earth Engine script that exports CHIRPS rainfall, MODIS NDVI and JRC surface-water layers to Google Drive for Section 5. Optional; run it first if you want these predictors. |
+| *scripts/Report_Assets.R* | Runs the analysis script and exports every figure (report/figures), result table and a reproducibility record (report/results) that the report reads. |
+| *report/Tsavo_HSM_Report.Rmd* The report (Word and HTML). Every figure has a caption, numbers are computed from report/results, and the knit stops if a figure has no caption. Citations are in report/references.bib. |
 
 Sections of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*:
 
@@ -60,18 +60,19 @@ Not included in the repository:
 | *data/gee_exports/* | GeoTIFFs downloaded from Google Drive after running the Earth Engine script. | Reproducible by running *scripts/gee/01_TCA_HSM_predictors_export.js*. |
 | *data/Terrain/TCA_DEM.tif* | SRTM DEM for the Tsavo Conservation Area. | Downloaded automatically by Section 5 on first run. |
 | *outputs/HSM/* | Habitat suitability rasters and tables (listed below). | Written when Section 5 is run. Only the rasters should be shared, never point locations. |
+| *report/Tsavo_HSM_Report.docx and .html* | Knitted outputs; regenerate by knitting the Rmd.” The figures and results are committed, so anyone can knit the report without your OneDrive rasters. |
 
-The three raster paths for RPI, PML_V2 and StudyPixels are written as absolute paths in the data-import chunks of the script; edit them to point to your copy.
+The four absolute raster paths (RPI, RPI temporal performance, PML_V2, StudyPixels) are written as absolute paths in the data-import chunks of the script; edit them to point to your copy.
 
 Outputs of Section 5 (*outputs/HSM/*): *rhino_TsavoWest_HSI_mean.tif* (mean suitability, 0–1), *rhino_TsavoWest_HSI_sd.tif* (spread across the 10 runs), *rhino_TsavoWest_suitable.tif* (suitable / not suitable), *rhino_TsavoWest_metrics.csv* (accuracy per run), *rhino_TsavoWest_zone_summary.csv*, *rhino_TsavoWest_expansion_candidates.csv*, and *cheetah_TCA_prior_HSI_mean.tif*, *cheetah_TCA_prior_suitable.tif* and *cheetah_TCA_prior_zone_summary.csv* (named *cheetah_TCA_occurrences_...* when the cheetah model is fitted from records).
 
 ### Habitat suitability models (Section 5)
 
-- **Grid and method:** a 500 m grid in UTM 37S. Random-forest probability models with 10 repetitions, spatial-block training/testing splits and balanced pseudo-absences, following the Google Earth Engine case studies of Crego et al. (2022), translated to R. Accuracy is reported as AUC-ROC, AUC-PR and the threshold that maximises sensitivity + specificity.
-- **Species records:** GBIF holds recent rhino and cheetah records for Tsavo, but almost all are iNaturalist observations with deliberately obscured coordinates (about 31 km uncertainty; checked on 2026-10-28). They are too coarse for a 500 m model and are used only after strict cleaning, as a supplement and reality check.
-- **Black rhino:** presences are every cell of the occupied Rhino Range (Ngulia Sanctuary + IPZ). The result is a habitat-similarity map: where the rest of the park resembles current rhino habitat, not where rhinos would choose to live. Candidate expansion areas are suitable cells within 5 km of water.
-- **Cheetah:** uses precise records (*data/Species/cheetah_occurrences.csv* with columns *lon*, *lat*, *year*, *uncertainty_m*) once at least 30 are supplied; until then an editable expert-prior index is mapped. The index is illustrative and has not been validated.
-- **Status:** first version. Precise records from KWS/AWF are the main upgrade.
+- The Rhino Range has a higher mean RPI than the rest of the park (0.72 against 0.65).
+- The difference shows no trend over 23 hydrological years.
+- About 6% of the rest of the park resembles the Rhino Range.
+- The candidate area depends on the water layer (39 km² with JRC water, 208 km² with the stream network).
+- The cheetah map is an unvalidated expert prior, because only 2 precise records survive cleaning.
 
 ## Getting started
 
@@ -86,12 +87,17 @@ renv::restore()
 ## Running the analysis
 
 1. (Optional) Run *scripts/gee/01_TCA_HSM_predictors_export.js* in the Google Earth Engine Code Editor and start each export task from the Tasks tab. Download the files from the Drive folder *TsavoHSM_GEE_Exports* into *data/gee_exports/*. Without them, Section 5 runs on the layers already in the project.
-2. Edit the three absolute raster paths (RPI, PML_V2, StudyPixels) in the data-import chunks of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*.
+2. Edit the four absolute raster paths (RPI, RPI temporal performance, PML_V2, StudyPixels) in the data-import chunks of *Mureithi_Tsavo_Habitat_Intelligence.Rmd*.
 3. Run the chunks of *Mureithi_Tsavo_Habitat_Intelligence.Rmd* in order from the top. Later sections use objects created earlier. WhiteboxTools downloads its binary (about 50 MB) on first use, and the terrain and hydrology processing in Section 4B is the slowest step.
+
+## Running the report
+
+1. Run source("scripts/Report_Assets.R") (needs the rasters, so skip it if you only want to knit).
+2. Knit report/Tsavo_HSM_Report.Rmd with the Knit button.
 
 ## Funding and acknowledgements
 
-[Nature Path grant to African Wildlife Foundation.]
+Nature's Path grant to African Wildlife Foundation.
 
 RPI datasets: Guy Lomax (University of Exeter/TESS Lab). Park boundaries: World Database on Protected Areas (WDPA, April 2025). Rhino Range boundaries (Ngulia Sanctuary and the Intensive Protection Zone): [source, e.g. Kenya Wildlife Service; Taita Taveta Wildlife Conservancies Association].
 
