@@ -1,8 +1,5 @@
-# Habitat Intelligence Framework for Black Rhino Expansion in Tsavo West National Park (RPI, terrain and habitat suitability models)
-
-This repository contains the data and code used to reproduce the analyses, figures, tables and report for a habitat intelligence study of black rhino expansion in Tsavo West National Park and cheetah in the Tsavo Conservation Area. Journal reference: [to be added].
-
-A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]
+# Habitat Intelligence Framework for Black Rhino Expansion in Tsavo West National Park and Suitability for Cheetah in Tsavo Conservation Area (RPI, terrain and habitat suitability models)
+A permanent version of this repository is archived at [DOI - to be added once a release is archived, e.g. on Zenodo]. Journal reference: [to be added].
 
 Use of this code is licensed under Licence: [![Licence: GPL v3] (https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0).
 
